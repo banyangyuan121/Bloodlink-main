@@ -28,7 +28,7 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
 
     // Register State
-    const [regRole, setRegRole] = useState('หมอ');
+    const [regRole, setRegRole] = useState('แพทย์');
     const [regName, setRegName] = useState('');
     const [regSurname, setRegSurname] = useState('');
     const [regEmail, setRegEmail] = useState('');
