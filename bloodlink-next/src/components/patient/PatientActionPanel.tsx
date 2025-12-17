@@ -3,15 +3,21 @@
 import { useState } from 'react';
 import { Patient } from '@/types';
 import { updatePatientStatus } from '@/lib/actions/patient';
-import { Edit3, Calendar, Clock, FileText, Loader2, Lock } from 'lucide-react';
+import { Edit3, Calendar, Clock, FileText, Loader2, Lock, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import { Permissions, STATUS_ORDER } from '@/lib/permissions';
 import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 
-// Exclude 'รอตรวจ' as it's the initial status (not selectable as target)
-const STATUS_OPTIONS = STATUS_ORDER.filter(s => s !== 'รอตรวจ');
+// Status options for the modal - excludes 'รอตรวจ' normally, but shows it when in 'เสร็จสิ้น' for recheck
+const getStatusOptions = (currentStatus: string) => {
+    // If current status is 'เสร็จสิ้น', include 'รอตรวจ' as an option for recheck
+    if (currentStatus === 'เสร็จสิ้น') {
+        return ['รอตรวจ', ...STATUS_ORDER.filter(s => s !== 'รอตรวจ' && s !== 'เสร็จสิ้น')];
+    }
+    return STATUS_ORDER.filter(s => s !== 'รอตรวจ') as string[];
+};
 
 interface PatientActionPanelProps {
     patient: Patient;
@@ -36,6 +42,12 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
 
     // Get the next allowed status for this user
     const nextAllowedStatus = Permissions.getNextAllowedStatus(effectiveRole, currentStatus);
+
+    // Check if recheck is available (Doctor only, when status is 'เสร็จสิ้น')
+    const canRecheck = currentStatus === 'เสร็จสิ้น' && Permissions.canUpdateToStatus(effectiveRole, 'เสร็จสิ้น', 'รอตรวจ');
+
+    // Get status options based on current status
+    const statusOptions = getStatusOptions(currentStatus);
 
     const handleUpdate = async () => {
         if (!nextAllowedStatus && !Permissions.isAdmin(effectiveRole)) {
@@ -92,7 +104,7 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
         };
     };
 
-    // Check if user can see the status panel at all
+
 
     if (!canSeePanel) {
         return null;
@@ -118,6 +130,18 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
                         <Edit3 className="mr-2 h-4 w-4" />
                         อัปเดตสถานะ
                     </button>
+                    {canRecheck && (
+                        <button
+                            onClick={() => {
+                                setSelectedStatus('รอตรวจ');
+                                setIsOpen(true);
+                            }}
+                            className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 dark:focus:ring-offset-gray-800 transition-colors"
+                        >
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            ตรวจอีกครั้ง
+                        </button>
+                    )}
                     <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 transition-colors">
                         ดูประวัติ
                     </button>
@@ -160,7 +184,7 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">เลือกสถานะใหม่</label>
                                                 <div className="flex flex-wrap gap-2">
-                                                    {STATUS_OPTIONS.map((opt) => {
+                                                    {statusOptions.map((opt) => {
                                                         const state = getStatusButtonState(opt);
 
                                                         return (

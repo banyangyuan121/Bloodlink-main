@@ -14,6 +14,7 @@ const STATUS_MESSAGES: Record<string, string> = {
 export class NotificationService {
     /**
      * Send notification to all responsible staff when patient status changes
+     * Includes link to patient results for editing when applicable
      * @param patientHn - Patient HN
      * @param status - New status
      * @param patientName - Patient's full name
@@ -31,7 +32,17 @@ export class NotificationService {
                 return { success: true, notifiedCount: 0 };
             }
 
-            const fullMessage = `${baseMessage}: ${patientName} (HN: ${patientHn})`;
+            // Add link to results page for statuses where editing/viewing results is relevant
+            const resultsLink = `/result-detail/${patientHn}`;
+            let fullMessage = `${baseMessage}: ${patientName} (HN: ${patientHn})`;
+
+            // Add specific action messages based on status
+            if (status === 'กำลังตรวจ') {
+                fullMessage += `\n\n📝 กรุณาตรวจสอบและบันทึกผลเลือด: ${resultsLink}`;
+            } else if (status === 'เสร็จสิ้น') {
+                fullMessage += `\n\n📊 ดูผลตรวจ: ${resultsLink}`;
+            }
+
             const subject = `อัปเดตสถานะผู้ป่วย - ${status}`;
 
             // 2. Get responsible staff for this patient

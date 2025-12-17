@@ -30,6 +30,13 @@ export function InboxProvider({ children }: { children: ReactNode }) {
     const isFirstLoadRef = useRef(true);
 
     const triggerPopup = useCallback((message: any) => {
+        // Only show popup for system notifications, NOT for direct messages
+        const messageType = message.type || 'message';
+        if (messageType === 'message' || messageType === 'direct') {
+            console.log('[InboxContext] Skipping popup for direct message:', messageType);
+            return; // Don't show popup for direct messages - user will see unread count
+        }
+
         let type: NotificationType = 'success';
         const subject = message.subject || '';
         const content = message.content || '';
@@ -51,8 +58,8 @@ export function InboxProvider({ children }: { children: ReactNode }) {
 
         notify(
             type,
-            subject || 'ข้อความใหม่',
-            content || 'คุณมีข้อความใหม่',
+            subject || 'แจ้งเตือนระบบ',
+            content || 'คุณมีการแจ้งเตือนใหม่',
             '/inbox'
         );
     }, [notify]);

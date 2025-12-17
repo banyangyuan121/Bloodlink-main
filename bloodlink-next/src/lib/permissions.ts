@@ -39,6 +39,11 @@ export const STATUS_TRANSITIONS: Record<string, { allowedRoles: string[], descri
         allowedRoles: ['แพทย์'],
         description: 'แพทย์ตรวจสอบและยืนยันผล'
     },
+    // Special: Recheck transition - allows Doctor to restart the process
+    'เสร็จสิ้น→รอตรวจ': {
+        allowedRoles: ['แพทย์'],
+        description: 'แพทย์สั่งตรวจซ้ำ'
+    },
 };
 
 /**
@@ -216,8 +221,11 @@ export const Permissions = {
         // Invalid statuses
         if (currentIndex === -1 || targetIndex === -1) return false;
 
-        // Must be exactly next step (no skipping, no going back)
-        if (targetIndex !== currentIndex + 1) return false;
+        // Special case: Allow เสร็จสิ้น → รอตรวจ for recheck
+        const isRecheckTransition = currentStatus === 'เสร็จสิ้น' && targetStatus === 'รอตรวจ';
+
+        // Must be exactly next step OR recheck transition
+        if (targetIndex !== currentIndex + 1 && !isRecheckTransition) return false;
 
         // Check role permission for this transition
         const transitionKey = `${currentStatus}→${targetStatus}`;
@@ -275,6 +283,11 @@ export const Permissions = {
     isValidTransition: (currentStatus?: string, targetStatus?: string): boolean => {
         if (!currentStatus || !targetStatus) return false;
         if (currentStatus === targetStatus) return false;
+
+        // Special case: Allow เสร็จสิ้น → รอตรวจ for recheck
+        if (currentStatus === 'เสร็จสิ้น' && targetStatus === 'รอตรวจ') {
+            return true;
+        }
 
         const currentIndex = STATUS_ORDER.indexOf(currentStatus as PatientStatus);
         const targetIndex = STATUS_ORDER.indexOf(targetStatus as PatientStatus);

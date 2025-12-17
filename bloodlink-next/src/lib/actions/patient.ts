@@ -5,6 +5,7 @@ import { Patient } from '@/types';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { Permissions } from '@/lib/permissions';
+import { NotificationService } from '@/lib/services/notificationService';
 
 export async function getPatients(): Promise<Patient[]> {
     return await PatientService.getPatients();
@@ -38,6 +39,7 @@ export async function searchPatients(query: string): Promise<Patient[]> {
 /**
  * Update patient status - Role-based workflow validation
  * Each role can only update specific transitions
+ * Now with auto-notifications to relevant staff
  */
 export async function updatePatientStatus(
     hn: string,
@@ -84,6 +86,16 @@ export async function updatePatientStatus(
     });
 
     if (success) {
+        // Send status notification to responsible staff
+        const patientName = `${patient.name} ${patient.surname}`;
+        try {
+            await NotificationService.sendStatusNotification(hn, processStatus, patientName);
+            console.log(`[updatePatientStatus] Sent notification for ${hn} -> ${processStatus}`);
+        } catch (notifError) {
+            console.error('[updatePatientStatus] Failed to send notification:', notifError);
+            // Don't fail the status update if notification fails
+        }
+
         revalidatePath('/dashboard');
         revalidatePath('/test-status');
         revalidatePath(`/history/${hn}`);
