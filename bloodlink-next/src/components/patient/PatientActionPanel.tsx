@@ -93,7 +93,6 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
     };
 
     // Check if user can see the status panel at all
-    const canSeePanel = Permissions.canSeeStatusPanel(effectiveRole);
 
     if (!canSeePanel) {
         return null;
