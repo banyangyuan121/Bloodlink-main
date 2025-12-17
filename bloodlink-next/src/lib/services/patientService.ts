@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from '@/lib/supabase';
 import { Patient } from '@/types';
+import { StatusHistoryService } from './statusHistoryService';
 
 export class PatientService {
     static async getPatients(): Promise<Patient[]> {
@@ -244,9 +245,26 @@ export class PatientService {
     static async updatePatientStatus(
         hn: string,
         processStatus: string,
-        data: { history?: string, date?: string, time?: string }
+        data: {
+            history?: string,
+            date?: string,
+            time?: string,
+            // New fields for status history
+            changedByEmail?: string,
+            changedByName?: string,
+            changedByRole?: string
+        }
     ): Promise<boolean> {
         try {
+            // First, get current status for history logging
+            const { data: currentPatient } = await supabase
+                .from('patients')
+                .select('process, name, surname')
+                .eq('hn', hn)
+                .single();
+
+            const previousStatus = currentPatient?.process || 'รอตรวจ';
+
             const updateData: any = {
                 process: processStatus,
                 updated_at: new Date().toISOString()
@@ -266,21 +284,32 @@ export class PatientService {
                 return false;
             }
 
-            // Send notification to responsible staff
-            // First, get patient name for the notification
-            const { data: patient } = await supabase
-                .from('patients')
-                .select('name, surname')
-                .eq('hn', hn)
-                .single();
+            // Log status change to history (if we have user info)
+            if (data.changedByEmail && previousStatus !== processStatus) {
+                StatusHistoryService.logStatusChange(
+                    hn,
+                    previousStatus,
+                    processStatus,
+                    data.changedByEmail,
+                    data.changedByName,
+                    data.changedByRole,
+                    data.history
+                ).catch(err => console.error('Status history log error:', err));
+            }
 
-            if (patient) {
-                const patientName = `${patient.name} ${patient.surname || ''}`.trim();
+            // Send notification to responsible staff
+            if (currentPatient) {
+                const patientName = `${currentPatient.name} ${currentPatient.surname || ''}`.trim();
                 // Fire and forget - call API endpoint which runs server-side
                 fetch('/api/notifications/status', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ patientHn: hn, status: processStatus, patientName })
+                    body: JSON.stringify({
+                        patientHn: hn,
+                        status: processStatus,
+                        patientName,
+                        changedBy: data.changedByName || data.changedByEmail
+                    })
                 }).catch(err => console.error('Notification error:', err));
             }
 

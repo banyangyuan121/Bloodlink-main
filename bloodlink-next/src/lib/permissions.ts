@@ -10,6 +10,37 @@ export enum Role {
 // List of valid roles for validation
 export const VALID_ROLES = [Role.DOCTOR, Role.NURSE, Role.LAB, Role.ADMIN] as const;
 
+// ===== Status Workflow Configuration =====
+// Ordered list of all patient statuses
+export const STATUS_ORDER = ['รอตรวจ', 'นัดหมาย', 'เจาะเลือด', 'กำลังจัดส่ง', 'กำลังตรวจ', 'เสร็จสิ้น'] as const;
+export type PatientStatus = typeof STATUS_ORDER[number];
+
+// Role-based transition permissions
+// Key format: "fromStatus→toStatus"
+// Admin can always perform any transition (handled separately)
+export const STATUS_TRANSITIONS: Record<string, { allowedRoles: string[], description: string }> = {
+    'รอตรวจ→นัดหมาย': {
+        allowedRoles: ['แพทย์', 'พยาบาล'],
+        description: 'แพทย์หรือพยาบาลนัดหมายเจาะเลือด'
+    },
+    'นัดหมาย→เจาะเลือด': {
+        allowedRoles: ['พยาบาล'],
+        description: 'พยาบาลทำการเจาะเลือด'
+    },
+    'เจาะเลือด→กำลังจัดส่ง': {
+        allowedRoles: ['เจ้าหน้าที่ห้องปฏิบัติการ'],
+        description: 'LAB รับตัวอย่างเลือด'
+    },
+    'กำลังจัดส่ง→กำลังตรวจ': {
+        allowedRoles: ['เจ้าหน้าที่ห้องปฏิบัติการ'],
+        description: 'LAB เริ่มตรวจวิเคราะห์'
+    },
+    'กำลังตรวจ→เสร็จสิ้น': {
+        allowedRoles: ['แพทย์'],
+        description: 'แพทย์ตรวจสอบและยืนยันผล'
+    },
+};
+
 /**
  * Check if a role is one of the valid system roles
  * Users without a valid role should be blocked from accessing the system
@@ -41,6 +72,24 @@ export function getEffectiveRole(actualRole?: string): string | undefined {
 }
 
 export const Permissions = {
+    /**
+     * Check if role is Doctor
+     */
+    isDoctor: (role?: string) => {
+        if (!role) return false;
+        const trimmed = role.trim();
+        return trimmed.includes(Role.DOCTOR) || trimmed.toLowerCase().includes('doctor');
+    },
+
+    /**
+     * Check if role is Nurse
+     */
+    isNurse: (role?: string) => {
+        if (!role) return false;
+        const trimmed = role.trim();
+        return trimmed.includes(Role.NURSE) || trimmed.toLowerCase().includes('nurse');
+    },
+
     /**
      * Check if role is Doctor or Nurse
      * Uses includes() for flexible matching
@@ -129,13 +178,119 @@ export const Permissions = {
         return false;
     },
 
+    // ===== STATUS WORKFLOW PERMISSIONS =====
+
     /**
-     * Can update patient status: Lab Staff (all), Admin (all)
-     * Doctor/Nurse: NO
+     * Can see the status update panel/modal
+     * ALL roles can now see the status panel (Doctor, Nurse, Lab, Admin)
+     * Individual transitions are controlled by canUpdateToStatus
+     */
+    canSeeStatusPanel: (role?: string) => {
+        if (!role) return false;
+        return Permissions.isDoctor(role) ||
+            Permissions.isNurse(role) ||
+            Permissions.isLabStaff(role) ||
+            Permissions.isAdmin(role);
+    },
+
+    /**
+     * Can update patient status from currentStatus to targetStatus
+     * Enforces workflow rules:
+     * 1. Must be forward transition only (no skipping, no going back)
+     * 2. Must have role permission for this specific transition
+     * 3. Admin can always perform any transition
+     */
+    canUpdateToStatus: (role?: string, currentStatus?: string, targetStatus?: string) => {
+        if (!role || !currentStatus || !targetStatus) return false;
+
+        // Admin can always update
+        if (Permissions.isAdmin(role)) return true;
+
+        // Same status - no update needed
+        if (currentStatus === targetStatus) return false;
+
+        // Check if this is a valid forward transition (next step only)
+        const currentIndex = STATUS_ORDER.indexOf(currentStatus as PatientStatus);
+        const targetIndex = STATUS_ORDER.indexOf(targetStatus as PatientStatus);
+
+        // Invalid statuses
+        if (currentIndex === -1 || targetIndex === -1) return false;
+
+        // Must be exactly next step (no skipping, no going back)
+        if (targetIndex !== currentIndex + 1) return false;
+
+        // Check role permission for this transition
+        const transitionKey = `${currentStatus}→${targetStatus}`;
+        const transition = STATUS_TRANSITIONS[transitionKey];
+
+        if (!transition) return false;
+
+        // Check if user's role matches any allowed role
+        return transition.allowedRoles.some(allowedRole => {
+            if (allowedRole === 'แพทย์') return Permissions.isDoctor(role);
+            if (allowedRole === 'พยาบาล') return Permissions.isNurse(role);
+            if (allowedRole === 'เจ้าหน้าที่ห้องปฏิบัติการ') return Permissions.isLabStaff(role);
+            return false;
+        });
+    },
+
+    /**
+     * Get the next allowed status for a role from current status
+     * Returns the next status if role can transition to it, otherwise null
+     */
+    getNextAllowedStatus: (role?: string, currentStatus?: string): string | null => {
+        if (!role || !currentStatus) return null;
+
+        // Admin can always go to next
+        const currentIndex = STATUS_ORDER.indexOf(currentStatus as PatientStatus);
+        if (currentIndex === -1 || currentIndex >= STATUS_ORDER.length - 1) return null;
+
+        const nextStatus = STATUS_ORDER[currentIndex + 1];
+
+        if (Permissions.canUpdateToStatus(role, currentStatus, nextStatus)) {
+            return nextStatus;
+        }
+
+        return null;
+    },
+
+    /**
+     * Get required role text for a transition (for tooltip display)
+     */
+    getRequiredRoleForTransition: (currentStatus?: string, targetStatus?: string): string => {
+        if (!currentStatus || !targetStatus) return 'ไม่ทราบ';
+
+        const transitionKey = `${currentStatus}→${targetStatus}`;
+        const transition = STATUS_TRANSITIONS[transitionKey];
+
+        if (!transition) return 'ไม่สามารถทำได้';
+
+        return transition.allowedRoles.join(' หรือ ');
+    },
+
+    /**
+     * Check if transition is valid (regardless of role)
+     * Used to determine if status buttons should be shown at all
+     */
+    isValidTransition: (currentStatus?: string, targetStatus?: string): boolean => {
+        if (!currentStatus || !targetStatus) return false;
+        if (currentStatus === targetStatus) return false;
+
+        const currentIndex = STATUS_ORDER.indexOf(currentStatus as PatientStatus);
+        const targetIndex = STATUS_ORDER.indexOf(targetStatus as PatientStatus);
+
+        // Must be exactly next step
+        return targetIndex === currentIndex + 1;
+    },
+
+    /**
+     * Legacy: Can update patient status (OLD - kept for backward compatibility)
+     * @deprecated Use canUpdateToStatus instead
      */
     canUpdateStatus: (role?: string) => {
         if (!role) return false;
-        return Permissions.isLabStaff(role) || Permissions.isAdmin(role);
+        // Now all roles might be able to update some status, so return true for all valid roles
+        return Permissions.canSeeStatusPanel(role);
     },
 
     /**

@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { SessionProvider, useSession } from 'next-auth/react';
-import { Permissions, getEffectiveRole } from '@/lib/permissions';
+import { Permissions } from '@/lib/permissions';
+import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 import Link from 'next/link';
 import { Edit2, Save, X } from 'lucide-react';
 import { formatDateTimeThai } from '@/lib/utils';
@@ -74,7 +75,7 @@ function BloodTestResultsContent() {
 
     // Permission check
     const { data: session } = useSession();
-    const effectiveRole = getEffectiveRole((session?.user as any)?.role);
+    const { effectiveRole } = useEffectiveRole();
     const canEditLab = Permissions.canEditLab(effectiveRole);
 
     useEffect(() => {

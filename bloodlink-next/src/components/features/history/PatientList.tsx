@@ -8,7 +8,8 @@ import { formatDateThai } from '@/lib/utils';
 import { BulkImportModal } from '@/components/modals/BulkImportModal';
 import { BulkAssignModal } from '@/components/modals/BulkAssignModal';
 import { useSession } from 'next-auth/react';
-import { Permissions, getEffectiveRole } from '@/lib/permissions';
+import { Permissions } from '@/lib/permissions';
+import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 
 // Severity color mapping based on days overdue
 const getSeverityColor = (daysOverdue: number) => {
@@ -61,7 +62,7 @@ export const PatientList = ({ basePath, title = 'ประวัติผู้�
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
 
     const { data: session } = useSession();
-    const role = getEffectiveRole(session?.user?.role);
+    const { effectiveRole: role } = useEffectiveRole();
     const isAdmin = Permissions.isAdmin(role);
     // Base permission to even see the bulk tools
     const canUseBulkTools = Permissions.canBulkAssign(role);

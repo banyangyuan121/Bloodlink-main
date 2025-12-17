@@ -1,14 +1,14 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { MessageService } from './messageService';
 
-// Status to notification message mapping
+// Status to notification message mapping with emojis
 const STATUS_MESSAGES: Record<string, string> = {
-    'รอตรวจ': 'ได้เพิ่มผู้ป่วยแล้ว',
-    'นัดหมาย': 'นัดหมายเจาะเลือด',
-    'เจาะเลือด': 'ถึงเวลาเจาะเลือด',
-    'กำลังจัดส่ง': 'กำลังจัดส่งผลเลือด',
-    'กำลังตรวจ': 'ส่งผลเลือดสำเร็จ กำลังตรวจสอบ',
-    'เสร็จสิ้น': 'ผลเลือดออกแล้ว'
+    'รอตรวจ': '📋 เพิ่มผู้ป่วยใหม่ในระบบ',
+    'นัดหมาย': '📅 นัดหมายเจาะเลือดเรียบร้อย',
+    'เจาะเลือด': '💉 เจาะเลือดเสร็จสิ้น รอส่งตรวจ',
+    'กำลังจัดส่ง': '🚚 กำลังจัดส่งตัวอย่างไปห้องปฏิบัติการ',
+    'กำลังตรวจ': '🔬 กำลังตรวจวิเคราะห์ผลเลือด',
+    'เสร็จสิ้น': '✅ ผลเลือดออกแล้ว พร้อมรายงาน'
 };
 
 export class NotificationService {
@@ -140,4 +140,82 @@ export class NotificationService {
             return { success: false, notifiedCount: 0, error: error.message };
         }
     }
+
+    /**
+     * Send notification to responsible doctors when LAB saves lab results
+     * This is triggered when lab results are saved while patient status is 'กำลังตรวจ'
+     * @param patientHn - Patient HN
+     * @param patientName - Patient's full name
+     * @param labTechName - Name of the lab technician who saved the results
+     */
+    static async sendLabResultReadyNotification(
+        patientHn: string,
+        patientName: string,
+        labTechName?: string
+    ): Promise<{ success: boolean; notifiedCount: number; error?: string }> {
+        try {
+            const message = `🔬 ผลเลือดของ ${patientName} (HN: ${patientHn}) พร้อมให้ตรวจสอบแล้ว${labTechName ? ` - บันทึกโดย ${labTechName}` : ''}`;
+            const subject = 'ผลเลือดพร้อมให้ตรวจสอบ';
+
+            // Get responsible staff for this patient
+            const { data: responsibilities, error: respError } = await supabaseAdmin
+                .from('patient_responsibility')
+                .select('user_email')
+                .eq('patient_hn', patientHn);
+
+            if (respError) {
+                console.error('Error fetching responsibilities:', respError);
+                return { success: false, notifiedCount: 0, error: respError.message };
+            }
+
+            if (!responsibilities || responsibilities.length === 0) {
+                console.log(`[NotificationService] No responsible staff found for patient HN: ${patientHn}`);
+                return { success: true, notifiedCount: 0 };
+            }
+
+            const emails = responsibilities.map(r => r.user_email);
+
+            // Get users who are doctors (only doctors should approve lab results)
+            const { data: doctors, error: usersError } = await supabaseAdmin
+                .from('users')
+                .select('id, email, role')
+                .in('email', emails)
+                .or('role.ilike.%แพทย์%,role.ilike.%doctor%');
+
+            if (usersError) {
+                console.error('[NotificationService] Error fetching doctor IDs:', usersError);
+                return { success: false, notifiedCount: 0, error: usersError.message };
+            }
+
+            if (!doctors || doctors.length === 0) {
+                console.log(`[NotificationService] No doctors found in responsible staff for HN: ${patientHn}`);
+                return { success: true, notifiedCount: 0 };
+            }
+
+            console.log(`[NotificationService] Notifying ${doctors.length} doctors about lab results for HN: ${patientHn}`);
+
+            // Send notification to each doctor
+            let notifiedCount = 0;
+            for (const doctor of doctors) {
+                const result = await MessageService.sendMessage(
+                    'system',
+                    doctor.id,
+                    message,
+                    subject,
+                    'system_update'
+                );
+                if (result.success) {
+                    notifiedCount++;
+                }
+            }
+
+            console.log(`Sent ${notifiedCount} lab result notifications for patient ${patientHn}`);
+            return { success: true, notifiedCount };
+
+        } catch (error: any) {
+            console.error('Error sending lab result notification:', error);
+            return { success: false, notifiedCount: 0, error: error.message };
+        }
+    }
 }
+

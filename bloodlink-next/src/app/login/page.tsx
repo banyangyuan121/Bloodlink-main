@@ -157,8 +157,9 @@ export default function LoginPage() {
                             <form onSubmit={handleLoginSubmit} className="space-y-5 animate-fadeIn">
                                 {/* Email */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">อีเมล</label>
+                                    <label htmlFor="login-email" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">อีเมล</label>
                                     <input
+                                        id="login-email"
                                         type="email"
                                         required
                                         value={email}
@@ -170,9 +171,10 @@ export default function LoginPage() {
 
                                 {/* Password */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">รหัสผ่าน</label>
+                                    <label htmlFor="login-password" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">รหัสผ่าน</label>
                                     <div className="relative">
                                         <input
+                                            id="login-password"
                                             type={showPassword ? "text" : "password"}
                                             required
                                             value={password}
@@ -183,6 +185,7 @@ export default function LoginPage() {
                                         <button
                                             type="button"
                                             onClick={() => setShowPassword(!showPassword)}
+                                            aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
                                             className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                                         >
                                             {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -229,8 +232,9 @@ export default function LoginPage() {
                             <form onSubmit={handleRegisterSubmit} className="space-y-4 animate-fadeIn">
                                 {/* Role */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">บทบาท</label>
+                                    <label htmlFor="reg-role" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">บทบาท</label>
                                     <select
+                                        id="reg-role"
                                         value={regRole}
                                         onChange={(e) => setRegRole(e.target.value)}
                                         className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:border-purple-600 appearance-none bg-white dark:bg-[#374151] text-gray-900 dark:text-white bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2712%27%20height%3D%278%27%20viewBox%3D%220%200%2012%208%22%20fill%3D%22none%22%3E%3Cpath%20d%3D%22M1%201.5L6%206.5L11%201.5%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_16px_center] pr-10"
@@ -244,28 +248,28 @@ export default function LoginPage() {
 
                                 {/* Name */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ชื่อ</label>
-                                    <input type="text" required value={regName} onChange={(e) => setRegName(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="given-name" />
+                                    <label htmlFor="reg-name" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ชื่อ</label>
+                                    <input id="reg-name" type="text" required value={regName} onChange={(e) => setRegName(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="given-name" />
                                 </div>
 
                                 {/* Surname */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">นามสกุล</label>
-                                    <input type="text" required value={regSurname} onChange={(e) => setRegSurname(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="family-name" />
+                                    <label htmlFor="reg-surname" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">นามสกุล</label>
+                                    <input id="reg-surname" type="text" required value={regSurname} onChange={(e) => setRegSurname(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="family-name" />
                                 </div>
 
                                 {/* Email */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">อีเมล</label>
-                                    <input type="email" required value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="email" />
+                                    <label htmlFor="reg-email" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">อีเมล</label>
+                                    <input id="reg-email" type="email" required value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="email" />
                                 </div>
 
                                 {/* Password */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">รหัสผ่าน</label>
+                                    <label htmlFor="reg-password" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">รหัสผ่าน</label>
                                     <div className="relative">
-                                        <input type={showRegPassword ? "text" : "password"} required value={regPassword} onChange={(e) => setRegPassword(e.target.value)} className="w-full py-2.5 px-3.5 pr-12 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="new-password" />
-                                        <button type="button" onClick={() => setShowRegPassword(!showRegPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                        <input id="reg-password" type={showRegPassword ? "text" : "password"} required value={regPassword} onChange={(e) => setRegPassword(e.target.value)} className="w-full py-2.5 px-3.5 pr-12 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="new-password" />
+                                        <button type="button" onClick={() => setShowRegPassword(!showRegPassword)} aria-label={showRegPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                                             {showRegPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                         </button>
                                     </div>
@@ -273,10 +277,10 @@ export default function LoginPage() {
 
                                 {/* Confirm Password */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ยืนยันรหัสผ่าน</label>
+                                    <label htmlFor="reg-confirm-password" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ยืนยันรหัสผ่าน</label>
                                     <div className="relative">
-                                        <input type={showRegConfirmPassword ? "text" : "password"} required value={regConfirmPassword} onChange={(e) => setRegConfirmPassword(e.target.value)} className="w-full py-2.5 px-3.5 pr-12 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="new-password" />
-                                        <button type="button" onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                        <input id="reg-confirm-password" type={showRegConfirmPassword ? "text" : "password"} required value={regConfirmPassword} onChange={(e) => setRegConfirmPassword(e.target.value)} className="w-full py-2.5 px-3.5 pr-12 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" autoComplete="new-password" />
+                                        <button type="button" onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)} aria-label={showRegConfirmPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                                             {showRegConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                         </button>
                                     </div>
@@ -284,8 +288,8 @@ export default function LoginPage() {
 
                                 {/* Hospital Type */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ประเภทโรงพยาบาล</label>
-                                    <select value={regHospitalType} onChange={(e) => setRegHospitalType(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:border-purple-600 appearance-none bg-white dark:bg-[#374151] text-gray-900 dark:text-white bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2712%27%20height%3D%278%27%20viewBox%3D%220%200%2012%208%22%20fill%3D%22none%22%3E%3Cpath%20d%3D%22M1%201.5L6%206.5L11%201.5%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_16px_center] pr-10" required>
+                                    <label htmlFor="reg-hospital-type" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ประเภทโรงพยาบาล</label>
+                                    <select id="reg-hospital-type" value={regHospitalType} onChange={(e) => setRegHospitalType(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:border-purple-600 appearance-none bg-white dark:bg-[#374151] text-gray-900 dark:text-white bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2712%27%20height%3D%278%27%20viewBox%3D%220%200%2012%208%22%20fill%3D%22none%22%3E%3Cpath%20d%3D%22M1%201.5L6%206.5L11%201.5%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_16px_center] pr-10" required>
                                         <option value="แม่ข่าย">โรงพยาบาลแม่ข่าย</option>
                                         <option value="ชุมชน">โรงพยาบาลชุมชน</option>
                                     </select>
@@ -293,14 +297,14 @@ export default function LoginPage() {
 
                                 {/* Hospital Name */}
                                 <div className="form-group">
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ชื่อโรงพยาบาล</label>
-                                    <input type="text" required value={regHospitalName} onChange={(e) => setRegHospitalName(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" />
+                                    <label htmlFor="reg-hospital-name" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ชื่อโรงพยาบาล</label>
+                                    <input id="reg-hospital-name" type="text" required value={regHospitalName} onChange={(e) => setRegHospitalName(e.target.value)} className="w-full py-2.5 px-3.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600" />
                                 </div>
 
                                 {/* Privacy Checkbox */}
                                 <div className="form-group flex items-center">
-                                    <label className="flex items-center cursor-pointer">
-                                        <input type="checkbox" checked={regPrivacy} onChange={(e) => setRegPrivacy(e.target.checked)} className="sr-only peer" />
+                                    <label htmlFor="reg-privacy" className="flex items-center cursor-pointer">
+                                        <input id="reg-privacy" type="checkbox" checked={regPrivacy} onChange={(e) => setRegPrivacy(e.target.checked)} className="sr-only peer" />
                                         <span className="w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded mr-2 peer-checked:bg-purple-600 peer-checked:border-purple-600 flex items-center justify-center transition-all bg-white dark:bg-[#374151]">
                                             {regPrivacy && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                                         </span>

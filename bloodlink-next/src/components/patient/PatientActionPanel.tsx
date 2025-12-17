@@ -3,39 +3,101 @@
 import { useState } from 'react';
 import { Patient } from '@/types';
 import { updatePatientStatus } from '@/lib/actions/patient';
-import { Edit3, Calendar, Clock, FileText, Loader2 } from 'lucide-react';
+import { Edit3, Calendar, Clock, FileText, Loader2, Lock } from 'lucide-react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
+import { Permissions, STATUS_ORDER } from '@/lib/permissions';
+import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 
-const STATUS_OPTIONS = ['นัดหมาย', 'เจาะเลือด', 'กำลังจัดส่ง', 'กำลังตรวจ', 'เสร็จสิ้น'];
+// Exclude 'รอตรวจ' as it's the initial status (not selectable as target)
+const STATUS_OPTIONS = STATUS_ORDER.filter(s => s !== 'รอตรวจ');
 
-export function PatientActionPanel({ patient }: { patient: Patient }) {
+interface PatientActionPanelProps {
+    patient: Patient;
+}
+
+export function PatientActionPanel({ patient }: PatientActionPanelProps) {
+    const { data: session } = useSession();
+    const { effectiveRole } = useEffectiveRole();
+
     const [isOpen, setIsOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
     // Form State
-    const [status, setStatus] = useState(patient.process || STATUS_OPTIONS[0]);
+    const currentStatus = patient.process || 'รอตรวจ';
+    const [selectedStatus, setSelectedStatus] = useState(currentStatus);
     const [history, setHistory] = useState('');
     const [date, setDate] = useState('');
     const [time, setTime] = useState('');
 
+    // Check if user can see the status panel at all
+    const canSeePanel = Permissions.canSeeStatusPanel(effectiveRole);
+
+    // Get the next allowed status for this user
+    const nextAllowedStatus = Permissions.getNextAllowedStatus(effectiveRole, currentStatus);
+
     const handleUpdate = async () => {
+        if (!nextAllowedStatus && !Permissions.isAdmin(effectiveRole)) {
+            toast.error('คุณไม่มีสิทธิ์อัปเดตสถานะนี้');
+            return;
+        }
+
         setIsLoading(true);
         try {
-            await updatePatientStatus(patient.hn, status, {
+            const result = await updatePatientStatus(patient.hn, selectedStatus, {
                 history: history || undefined,
                 date: date || undefined,
                 time: time || undefined
             });
-            setIsOpen(false);
-            // Optional: Show success toast
+
+            if (result.success) {
+                toast.success('อัปเดตสถานะเรียบร้อย');
+                setIsOpen(false);
+                // Reset form
+                setHistory('');
+                setDate('');
+                setTime('');
+            } else {
+                toast.error(result.error || 'ไม่สามารถอัปเดตสถานะได้');
+            }
         } catch (error) {
             console.error(error);
-            toast.error('Failed to update status');
+            toast.error('เกิดข้อผิดพลาดในการอัปเดตสถานะ');
         } finally {
             setIsLoading(false);
         }
     };
+
+    // Get button state for each status option
+    const getStatusButtonState = (targetStatus: string) => {
+        const isCurrentStatus = currentStatus === targetStatus;
+        const canUpdate = Permissions.canUpdateToStatus(effectiveRole, currentStatus, targetStatus);
+        const isValidNext = Permissions.isValidTransition(currentStatus, targetStatus);
+        const requiredRole = Permissions.getRequiredRoleForTransition(currentStatus, targetStatus);
+
+        return {
+            isCurrentStatus,
+            canUpdate,
+            isValidNext,
+            requiredRole,
+            isDisabled: !canUpdate || isCurrentStatus,
+            tooltip: isCurrentStatus
+                ? 'สถานะปัจจุบัน'
+                : !isValidNext
+                    ? 'ไม่ใช่ลำดับถัดไป'
+                    : !canUpdate
+                        ? `ต้องใช้สิทธิ์: ${requiredRole}`
+                        : ''
+        };
+    };
+
+    // Check if user can see the status panel at all
+    const canSeePanel = Permissions.canSeeStatusPanel(effectiveRole);
+
+    if (!canSeePanel) {
+        return null;
+    }
 
     return (
         <>
@@ -45,15 +107,29 @@ export function PatientActionPanel({ patient }: { patient: Patient }) {
                 </div>
                 <div className="space-y-3">
                     <button
-                        onClick={() => setIsOpen(true)}
+                        onClick={() => {
+                            // Pre-select the next allowed status
+                            if (nextAllowedStatus) {
+                                setSelectedStatus(nextAllowedStatus);
+                            }
+                            setIsOpen(true);
+                        }}
                         className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 transition-colors"
                     >
                         <Edit3 className="mr-2 h-4 w-4" />
-                        Update Status / Appointment
+                        อัปเดตสถานะ
                     </button>
                     <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 transition-colors">
-                        View History Logs
+                        ดูประวัติ
                     </button>
+                </div>
+
+                {/* Current Status Display */}
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">สถานะปัจจุบัน</p>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
+                        {currentStatus}
+                    </span>
                 </div>
             </div>
 
@@ -72,66 +148,93 @@ export function PatientActionPanel({ patient }: { patient: Patient }) {
                                 <div className="sm:flex sm:items-start">
                                     <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
                                         <h3 className="text-xl leading-6 font-bold text-gray-900 dark:text-white mb-4" id="modal-title">
-                                            Update Patient Status
+                                            อัปเดตสถานะผู้ป่วย
                                         </h3>
                                         <div className="mt-2 space-y-4">
-                                            {/* Status Select */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Status</label>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {STATUS_OPTIONS.map((opt) => (
-                                                        <button
-                                                            key={opt}
-                                                            onClick={() => setStatus(opt)}
-                                                            className={clsx(
-                                                                "px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
-                                                                status === opt
-                                                                    ? "bg-blue-100 dark:bg-blue-900/50 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-                                                                    : "bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
-                                                            )}
-                                                        >
-                                                            {opt}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                            {/* Current Status Info */}
+                                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">สถานะปัจจุบัน</p>
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-white">{currentStatus}</p>
                                             </div>
 
-                                            {/* Appointment Date/Time - Only show if 'นัดหมาย' is selected or user wants to update it */}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center">
-                                                        <Calendar className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> Date
-                                                    </label>
-                                                    <input
-                                                        type="date"
-                                                        value={date}
-                                                        onChange={(e) => setDate(e.target.value)}
-                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                                    />
+                                            {/* Status Select */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">เลือกสถานะใหม่</label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {STATUS_OPTIONS.map((opt) => {
+                                                        const state = getStatusButtonState(opt);
+
+                                                        return (
+                                                            <button
+                                                                key={opt}
+                                                                onClick={() => !state.isDisabled && setSelectedStatus(opt)}
+                                                                disabled={state.isDisabled}
+                                                                title={state.tooltip}
+                                                                className={clsx(
+                                                                    "px-3 py-1.5 rounded-lg text-sm font-medium border transition-all relative",
+                                                                    selectedStatus === opt && !state.isDisabled
+                                                                        ? "bg-blue-100 dark:bg-blue-900/50 border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500"
+                                                                        : state.isCurrentStatus
+                                                                            ? "bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-600 text-green-700 dark:text-green-300 cursor-default"
+                                                                            : state.isDisabled
+                                                                                ? "bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                                                                                : "bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 hover:border-blue-300"
+                                                                )}
+                                                            >
+                                                                <span className="flex items-center gap-1">
+                                                                    {state.isDisabled && !state.isCurrentStatus && (
+                                                                        <Lock className="w-3 h-3" />
+                                                                    )}
+                                                                    {opt}
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center">
-                                                        <Clock className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> Time
-                                                    </label>
-                                                    <input
-                                                        type="time"
-                                                        value={time}
-                                                        onChange={(e) => setTime(e.target.value)}
-                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                                    />
-                                                </div>
+                                                {/* Helper text */}
+                                                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                                    🔒 = ต้องใช้สิทธิ์บทบาทอื่น | สีเขียว = สถานะปัจจุบัน
+                                                </p>
                                             </div>
+
+                                            {/* Appointment Date/Time - Only show if 'นัดหมาย' is selected */}
+                                            {selectedStatus === 'นัดหมาย' && (
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center">
+                                                            <Calendar className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> วันที่
+                                                        </label>
+                                                        <input
+                                                            type="date"
+                                                            value={date}
+                                                            onChange={(e) => setDate(e.target.value)}
+                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center">
+                                                            <Clock className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> เวลา
+                                                        </label>
+                                                        <input
+                                                            type="time"
+                                                            value={time}
+                                                            onChange={(e) => setTime(e.target.value)}
+                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {/* History Note */}
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center">
-                                                    <FileText className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> Note / Result
+                                                    <FileText className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> หมายเหตุ
                                                 </label>
                                                 <textarea
                                                     rows={3}
                                                     value={history}
                                                     onChange={(e) => setHistory(e.target.value)}
-                                                    placeholder="Enter details..."
+                                                    placeholder="กรอกหมายเหตุ (ถ้ามี)..."
                                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm placeholder-gray-400 dark:placeholder-gray-500"
                                                 />
                                             </div>
@@ -143,17 +246,17 @@ export function PatientActionPanel({ patient }: { patient: Patient }) {
                                 <button
                                     type="button"
                                     onClick={handleUpdate}
-                                    disabled={isLoading}
-                                    className="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                                    disabled={isLoading || !Permissions.canUpdateToStatus(effectiveRole, currentStatus, selectedStatus)}
+                                    className="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Save Changes'}
+                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'บันทึก'}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setIsOpen(false)}
                                     className="mt-3 w-full inline-flex justify-center rounded-xl border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                                 >
-                                    Cancel
+                                    ยกเลิก
                                 </button>
                             </div>
                         </div>

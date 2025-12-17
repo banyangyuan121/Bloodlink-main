@@ -7,7 +7,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Patient } from '@/types';
 import { useSession } from 'next-auth/react';
-import { Permissions, getEffectiveRole } from '@/lib/permissions';
+import { Permissions } from '@/lib/permissions';
+import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 
 interface DashboardStats {
     totalPatients: number;
@@ -24,7 +25,7 @@ interface SystemInfo {
 
 export default function DashboardPage() {
     const { data: session } = useSession();
-    const [effectiveRole, setEffectiveRole] = useState<string | undefined>(undefined);
+    const { effectiveRole } = useEffectiveRole();
     const [stats, setStats] = useState<DashboardStats>({
         totalPatients: 0,
         appointments: 0,
@@ -80,10 +81,7 @@ export default function DashboardPage() {
         fetchStats();
     }, []);
 
-    // Load effective role (checks for override in sessionStorage)
-    useEffect(() => {
-        setEffectiveRole(getEffectiveRole(session?.user?.role));
-    }, [session?.user?.role]);
+
 
     return (
         <MainLayout>

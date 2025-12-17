@@ -5,7 +5,8 @@ import { addPatient } from '@/lib/actions/patient';
 import { useRouter } from 'next/navigation';
 import { Loader2, Save, User, Activity, ShieldX, UsersRound, X, UserPlus } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-import { Permissions, getEffectiveRole } from '@/lib/permissions';
+import { Permissions } from '@/lib/permissions';
+import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 
 export function AddPatientForm() {
     const router = useRouter();
@@ -20,7 +21,7 @@ export function AddPatientForm() {
 
     // Check if user has permission to add patients
     const { data: session } = useSession();
-    const effectiveRole = getEffectiveRole((session?.user as any)?.role);
+    const { effectiveRole } = useEffectiveRole();
     const canAdd = Permissions.canAddPatient(effectiveRole);
     const currentUserEmail = session?.user?.email || '';
     const currentUserName = session?.user?.name || 'คุณ';

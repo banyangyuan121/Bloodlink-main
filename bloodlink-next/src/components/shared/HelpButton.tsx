@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, CheckCircle, Truck, Droplets, Bug, User } from 'lucide-react';
 import { NotificationType } from '@/components/shared/NotificationPopup';
-import { Permissions } from '@/lib/permissions';
+import { Permissions, STATUS_ORDER } from '@/lib/permissions';
 import { useSession } from 'next-auth/react';
 
 interface HelpButtonProps {
@@ -87,7 +87,7 @@ export function HelpButton({ onNotify }: HelpButtonProps) {
         { value: 'แพทย์', label: 'แพทย์ (Doctor)', color: 'text-blue-400' },
         { value: 'พยาบาล', label: 'พยาบาล (Nurse)', color: 'text-green-400' },
         { value: 'เจ้าหน้าที่ห้องปฏิบัติการ', label: 'Lab Staff', color: 'text-yellow-400' },
-        { value: 'admin', label: 'Admin', color: 'text-red-400' },
+        { value: 'ผู้ดูแล', label: 'Admin', color: 'text-red-400' },
     ];
 
     return (
@@ -154,8 +154,8 @@ export function HelpButton({ onNotify }: HelpButtonProps) {
 
                                         {/* Permission Preview */}
                                         <div className="pt-2 border-t border-gray-600 text-[10px] text-gray-400">
-                                            <p>Permissions (current):</p>
-                                            <div className="flex gap-2 mt-1 flex-wrap">
+                                            <p className="font-semibold mb-1">General Permissions:</p>
+                                            <div className="flex gap-2 flex-wrap">
                                                 <span className={Permissions.canEditPatient(overrideRole || actualRole || '') ? 'text-green-400' : 'text-red-400'}>
                                                     Patient: {Permissions.canEditPatient(overrideRole || actualRole || '') ? '✓' : '✗'}
                                                 </span>
@@ -165,6 +165,36 @@ export function HelpButton({ onNotify }: HelpButtonProps) {
                                                 <span className={Permissions.isAdmin(overrideRole || actualRole || '') ? 'text-green-400' : 'text-red-400'}>
                                                     Admin: {Permissions.isAdmin(overrideRole || actualRole || '') ? '✓' : '✗'}
                                                 </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Status Workflow Permissions */}
+                                        <div className="pt-2 border-t border-gray-600 text-[10px] text-gray-400">
+                                            <p className="font-semibold mb-1">Status Workflow:</p>
+                                            <div className="space-y-1">
+                                                {[
+                                                    { from: 'รอตรวจ', to: 'นัดหมาย', label: 'รอตรวจ→นัดหมาย' },
+                                                    { from: 'นัดหมาย', to: 'เจาะเลือด', label: 'นัดหมาย→เจาะเลือด' },
+                                                    { from: 'เจาะเลือด', to: 'กำลังจัดส่ง', label: 'เจาะเลือด→จัดส่ง' },
+                                                    { from: 'กำลังจัดส่ง', to: 'กำลังตรวจ', label: 'จัดส่ง→กำลังตรวจ' },
+                                                    { from: 'กำลังตรวจ', to: 'เสร็จสิ้น', label: 'กำลังตรวจ→เสร็จ' },
+                                                ].map(({ from, to, label }) => {
+                                                    const currentRole = overrideRole || actualRole || '';
+                                                    const canDo = Permissions.canUpdateToStatus(currentRole, from, to);
+                                                    const requiredRole = Permissions.getRequiredRoleForTransition(from, to);
+                                                    return (
+                                                        <div key={label} className="flex items-center justify-between">
+                                                            <span className={canDo ? 'text-green-400' : 'text-gray-500'}>
+                                                                {canDo ? '✓' : '✗'} {label}
+                                                            </span>
+                                                            {!canDo && (
+                                                                <span className="text-[8px] text-gray-500">
+                                                                    ({requiredRole})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
 

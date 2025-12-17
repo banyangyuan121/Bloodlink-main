@@ -36,7 +36,8 @@ export async function searchPatients(query: string): Promise<Patient[]> {
 }
 
 /**
- * Update patient status - Lab Staff/Admin only
+ * Update patient status - Role-based workflow validation
+ * Each role can only update specific transitions
  */
 export async function updatePatientStatus(
     hn: string,
@@ -44,18 +45,47 @@ export async function updatePatientStatus(
     data: { history?: string, date?: string, time?: string }
 ) {
     const session = await auth();
-    const role = (session?.user as any)?.role;
+    const user = session?.user as any;
+    const role = user?.role;
+    const email = user?.email;
+    const userName = user?.name || email;
 
-    // Only Lab Staff and Admin can update status
-    // Admin bypasses all checks (for debug override to work)
-    if (!Permissions.isAdmin(role) && !Permissions.canUpdateStatus(role)) {
-        return { success: false, error: 'Unauthorized: เฉพาะเจ้าหน้าที่ห้องปฏิบัติการเท่านั้นที่สามารถอัปเดตสถานะได้' };
+    // Must have a valid role to update status
+    if (!Permissions.canSeeStatusPanel(role)) {
+        return {
+            success: false,
+            error: 'Unauthorized: คุณไม่มีสิทธิ์อัปเดตสถานะ'
+        };
     }
 
-    const success = await PatientService.updatePatientStatus(hn, processStatus, data);
+    // Get current patient status for validation
+    const patient = await PatientService.getPatientByHn(hn);
+    if (!patient) {
+        return { success: false, error: 'ไม่พบข้อมูลผู้ป่วย' };
+    }
+
+    const currentStatus = patient.process || 'รอตรวจ';
+
+    // Validate this specific transition is allowed for user's role
+    if (!Permissions.canUpdateToStatus(role, currentStatus, processStatus)) {
+        const requiredRole = Permissions.getRequiredRoleForTransition(currentStatus, processStatus);
+        return {
+            success: false,
+            error: `ไม่สามารถอัปเดตสถานะได้: ต้องใช้สิทธิ์ ${requiredRole}`
+        };
+    }
+
+    // Pass user info for status history logging
+    const success = await PatientService.updatePatientStatus(hn, processStatus, {
+        ...data,
+        changedByEmail: email,
+        changedByName: userName,
+        changedByRole: role
+    });
 
     if (success) {
         revalidatePath('/dashboard');
+        revalidatePath('/test-status');
         revalidatePath(`/history/${hn}`);
         revalidatePath(`/patients/${hn}`);
         return { success: true };

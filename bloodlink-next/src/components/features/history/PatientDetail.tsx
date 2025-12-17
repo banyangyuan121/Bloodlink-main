@@ -6,12 +6,14 @@ import { Patient } from '@/types';
 import { LabService, LabResult } from '@/lib/services/labService';
 import { AppointmentService, Appointment } from '@/lib/services/appointmentService';
 import { PatientService } from '@/lib/services/patientService';
+import { updatePatientStatus as updatePatientStatusAction } from '@/lib/actions/patient';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // ... (inside component)
 
 
-import { Permissions, getEffectiveRole } from '@/lib/permissions';
+import { Permissions } from '@/lib/permissions';
+import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 import { useSession } from 'next-auth/react';
 import {
     Calendar,
@@ -141,9 +143,9 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
     const [isDeleting, setIsDeleting] = useState(false);
     const router = useRouter();
 
-    // Permission Checks - Use getEffectiveRole for debug override support
+    // Permission Checks - Use useEffectiveRole hook for debug override support
     const { data: session } = useSession();
-    const effectiveRole = getEffectiveRole((session?.user as any)?.role);
+    const { effectiveRole } = useEffectiveRole();
     const currentUserEmail = session?.user?.email;
 
     // Derive ownership/responsibility from fetched state
@@ -156,7 +158,7 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
     // Updated: canManageStaff now uses isResponsible
     const canManageStaff = Permissions.canManageStaff(effectiveRole, isResponsible);
     const canDeleteRole = Permissions.canDeletePatient(effectiveRole, isOwner);
-    const canUpdateStatus = Permissions.canUpdateStatus(effectiveRole);
+    const canUpdateStatus = Permissions.canSeeStatusPanel(effectiveRole); // Changed: Now all roles can see status panel
     const canEditLab = Permissions.canEditLab(effectiveRole);
 
     // Lab History State
@@ -427,8 +429,16 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
         }
     };
 
-    // Update Status Handler - NOW CALLS REAL API
+    // Update Status Handler - Uses server action with role validation
     const handleUpdateStatus = async () => {
+        // Check if role can perform this transition
+        const currentStatus = patientData?.process || 'รอตรวจ';
+        if (!Permissions.canUpdateToStatus(effectiveRole, currentStatus, tempStatus)) {
+            const requiredRole = Permissions.getRequiredRoleForTransition(currentStatus, tempStatus);
+            toast.error(`ไม่สามารถอัปเดตสถานะได้: ต้องใช้สิทธิ์ ${requiredRole}`);
+            return;
+        }
+
         setIsUpdating(true);
         try {
             const data: any = {
@@ -454,9 +464,10 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                 setAppointmentHistory(history);
             }
 
-            const success = await PatientService.updatePatientStatus(hn, tempStatus, data);
+            // Use server action for role validation and status history logging
+            const result = await updatePatientStatusAction(hn, tempStatus, data);
 
-            if (success) {
+            if (result.success) {
                 setPatientData((prev: PatientData | null) => {
                     if (!prev) return null;
                     return {
@@ -468,9 +479,13 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                     };
                 });
                 setShowStatusModal(false);
+                toast.success('อัปเดตสถานะเรียบร้อย');
+            } else {
+                toast.error(result.error || 'ไม่สามารถอัปเดตสถานะได้');
             }
         } catch (error) {
             console.error('Failed to update status:', error);
+            toast.error('เกิดข้อผิดพลาดในการอัปเดตสถานะ');
         } finally {
             setIsUpdating(false);
         }
@@ -596,12 +611,13 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                     <div className="flex-1 md:pl-6 pt-2 relative">
                         <div className="absolute top-0 right-0">
                             <button
-                                onClick={() => canEditLab && setShowStatusModal(true)}
-                                disabled={!canEditLab}
-                                className={`w-8 h-8 rounded-[8px] flex items-center justify-center shadow-sm transition-transform active:scale-95 ${canEditLab
+                                onClick={() => setShowStatusModal(true)}
+                                disabled={!canUpdateStatus}
+                                className={`w-8 h-8 rounded-[8px] flex items-center justify-center shadow-sm transition-transform active:scale-95 ${canUpdateStatus
                                     ? 'bg-[#818cf8] text-white hover:bg-[#6366F1]'
                                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                     }`}
+                                title="อัปเดตสถานะ"
                             >
                                 {STATUS_ICONS[patientData.process] || <ShoppingCart className="w-4 h-4" />}
                             </button>
