@@ -8,7 +8,7 @@ export const EASING = {
     ALERT: [0.36, 0.07, 0.19, 0.97], // Gentle attention
 } as const;
 
-export const VARIANTS = {
+export const VARIANTS: Record<string, any> = {
     fadeIn: {
         hidden: { opacity: 0 },
         visible: {
@@ -43,7 +43,7 @@ export const VARIANTS = {
     },
     // Error Shake (Rollback)
     shake: {
-        x: [0, -10, 10, -5, 5, 0],
+        x: [0, -10, 10, -5, 5, 0] as any,
         transition: { duration: 0.4 }
     }
-} satisfies Record<string, Variants>;
+};

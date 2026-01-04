@@ -8,7 +8,7 @@ import { useSession } from 'next-auth/react';
 import { Permissions } from '@/lib/permissions';
 import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 import { CustomSelect } from '@/components/ui/CustomSelect';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { patientSchema, type PatientFormData } from '@/lib/validations/patient';
 
@@ -37,7 +37,7 @@ export function AddPatientForm() {
         control,
         formState: { errors },
     } = useForm<PatientFormData>({
-        resolver: zodResolver(patientSchema),
+        resolver: zodResolver(patientSchema) as Resolver<PatientFormData>,
         defaultValues: {
             gender: 'Male',
             bloodType: 'O',
