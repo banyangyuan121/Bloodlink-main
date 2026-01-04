@@ -39,30 +39,51 @@ export class MessageService {
                 .or(`receiver_id.eq.${userId},sender_id.eq.${userId}`)
                 .order('created_at', { ascending: false });
 
-            // 2. Fetch from 'admin_inbox' table
+            // 2. Fetch from 'admin_inbox' table (Safely)
             const adminInboxPromise = supabaseAdmin
                 .from('admin_inbox')
                 .select('*')
                 .order('created_at', { ascending: false });
 
-            const [messagesRes, adminRes] = await Promise.all([messagesPromise, adminInboxPromise]);
+            const [messagesResult, adminResult] = await Promise.allSettled([messagesPromise, adminInboxPromise]);
 
-            if (messagesRes.error) throw messagesRes.error;
-            // We don't throw for admin inbox error strictly, maybe just log? 
-            if (adminRes.error) console.warn('Admin inbox fetch error:', adminRes.error);
+            // Handle Messages Result
+            let messagesData: any[] = [];
+            if (messagesResult.status === 'fulfilled') {
+                if (messagesResult.value.error) {
+                    console.error('Error fetching main messages:', messagesResult.value.error);
+                    // Decide if this is fatal. Usually yes for main messages.
+                    throw messagesResult.value.error;
+                }
+                messagesData = messagesResult.value.data || [];
+            } else {
+                console.error('Promise rejected for messages:', messagesResult.reason);
+                throw new Error('Failed to execute messages query');
+            }
+
+            // Handle Admin Inbox Result (Non-fatal)
+            let adminData: any[] = [];
+            if (adminResult.status === 'fulfilled') {
+                if (adminResult.value.error) {
+                    console.warn('Admin inbox fetch error (ignoring):', adminResult.value.error.message);
+                } else {
+                    adminData = adminResult.value.data || [];
+                }
+            } else {
+                console.warn('Promise rejected for admin_inbox (ignoring):', adminResult.reason);
+            }
 
             // Map 'messages'
-            const mappedMessages = messagesRes.data?.map(msg => ({
+            const mappedMessages = messagesData.map(msg => ({
                 ...msg,
                 sender_name: msg.sender ? `${msg.sender.name} ${msg.sender.surname}` : 'System',
                 sender_email: msg.sender?.email,
                 receiver_name: msg.receiver ? `${msg.receiver.name} ${msg.receiver.surname}` : 'Unknown',
                 receiver_email: msg.receiver?.email
-            })) || [];
+            }));
 
             // Map 'admin_inbox'
-            // admin_inbox items are for the system/admin, so we treat them as received by 'userId' (viewer) conceptually for display
-            const mappedAdminMessages = adminRes.data?.map(item => ({
+            const mappedAdminMessages = adminData.map(item => ({
                 id: item.id,
                 sender_id: 'system_external', // Placeholder
                 receiver_id: userId,
@@ -75,7 +96,7 @@ export class MessageService {
                 type: item.type,
                 is_read: item.is_read,
                 created_at: item.created_at
-            } as Message)) || [];
+            } as Message));
 
             // Combine and Sort
             const allMessages = [...mappedMessages, ...mappedAdminMessages].sort((a, b) =>

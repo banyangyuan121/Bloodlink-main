@@ -3,8 +3,22 @@
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
 import { AuthService } from './services/authService';
+import { loginSchema, registerSchema } from './validations/auth';
 
 export async function authenticate(email: string, password: unknown) {
+    // Validate input using Zod
+    const validatedFields = loginSchema.safeParse({
+        email,
+        password,
+    });
+
+    if (!validatedFields.success) {
+        return {
+            error: 'ข้อมูลไม่ถูกต้อง',
+            fieldErrors: validatedFields.error.flatten().fieldErrors
+        };
+    }
+
     try {
         await signIn('credentials', { email, password, redirect: false });
         return { success: true };
@@ -22,16 +36,26 @@ export async function authenticate(email: string, password: unknown) {
 }
 
 export async function register(data: any) {
-    // Manual validation could happen here, but we trust the form roughly
-    // Or we map formData to our object
+    // Validate input using Zod
+    const validatedFields = registerSchema.safeParse(data);
+
+    if (!validatedFields.success) {
+        return {
+            error: 'ข้อมูลไม่ถูกต้อง',
+            fieldErrors: validatedFields.error.flatten().fieldErrors
+        };
+    }
+
+    const { role, name, surname, email, password, hospitalType, hospitalName } = validatedFields.data;
+
     const result = await AuthService.registerUser({
-        role: data.role,
-        name: data.name,
-        surname: data.surname,
-        email: data.email,
-        password: data.password,
-        hospitalType: data.hospitalType,
-        hospitalName: data.hospitalName
+        role,
+        name,
+        surname,
+        email,
+        password,
+        hospitalType,
+        hospitalName
     });
 
     if (!result.success) {

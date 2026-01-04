@@ -78,13 +78,13 @@ export class PatientService {
                     latestReceipt: p.latest_receipt || '-',
                     testType: p.test_type || '',
                     status: p.status || 'ใช้งาน',
-                    process: p.process || 'นัดหมาย',
+                    process: p.process || 'รอตรวจ',
                     appointmentDate: p.appointment_date || p.created_at,
                     timestamp: p.updated_at,
                     caregiver: caregiverName,
                     creatorEmail: creator?.user_email,
                     responsibleEmails: allResponsible,
-                    appointmentTime: '',
+                    appointmentTime: p.appointment_date ? new Date(p.appointment_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '',
                 };
             });
         } catch (error) {
@@ -116,11 +116,11 @@ export class PatientService {
                 latestReceipt: patient.latest_receipt || '-',
                 testType: patient.test_type || '',
                 status: patient.status || 'ใช้งาน',
-                process: patient.process || 'นัดหมาย',
+                process: patient.process || 'รอตรวจ',
                 appointmentDate: patient.appointment_date || patient.created_at,
                 timestamp: patient.updated_at,
                 caregiver: patient.caregiver || '',
-                appointmentTime: '',
+                appointmentTime: patient.appointment_date ? new Date(patient.appointment_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '',
             };
         } catch (error) {
             console.error('Error getting patient by HN:', error);
@@ -130,6 +130,14 @@ export class PatientService {
 
     static async addPatient(data: Partial<Patient>): Promise<{ success: boolean; error?: string }> {
         try {
+            // Check for duplicate HN
+            if (data.hn) {
+                const existingPatient = await this.getPatientByHn(data.hn);
+                if (existingPatient) {
+                    return { success: false, error: 'มีผู้ป่วยหมายเลข HN นี้แล้วในระบบ' };
+                }
+            }
+
             const { error } = await supabase
                 .from('patients')
                 .insert([
@@ -145,8 +153,8 @@ export class PatientService {
                         allergies: data.allergies || '-',
                         test_type: data.testType || 'ตรวจสุขภาพ',
                         status: 'ใช้งาน',
-                        process: 'นัดหมาย',
-                        appointment_date: data.appointmentDate || new Date().toISOString(),
+                        process: 'รอตรวจ',
+                        appointment_date: data.appointmentDate || null,
                         caregiver: data.caregiver || '',
                         latest_receipt: ''
                     }
@@ -172,6 +180,14 @@ export class PatientService {
         additionalResponsible: string[] = []
     ): Promise<{ success: boolean; error?: string }> {
         try {
+            // Check for duplicate HN
+            if (data.hn) {
+                const existingPatient = await this.getPatientByHn(data.hn);
+                if (existingPatient) {
+                    return { success: false, error: 'มีผู้ป่วยหมายเลข HN นี้แล้วในระบบ' };
+                }
+            }
+
             // First add the patient
             const { error: patientError } = await supabase
                 .from('patients')
@@ -188,8 +204,8 @@ export class PatientService {
                         allergies: data.allergies || '-',
                         test_type: data.testType || 'ตรวจสุขภาพ',
                         status: 'ใช้งาน',
-                        process: 'นัดหมาย',
-                        appointment_date: data.appointmentDate || new Date().toISOString(),
+                        process: 'รอตรวจ',
+                        appointment_date: data.appointmentDate || null,
                         caregiver: data.caregiver || '',
                         latest_receipt: ''
                     }
@@ -227,12 +243,18 @@ export class PatientService {
                 // Patient was added, responsibility failed - not critical
             }
 
-            // Send notification for new patient (status: นัดหมาย)
+            // Send notification for new patient (status: รอตรวจ)
             const patientName = `${data.name} ${data.surname || ''}`.trim();
             fetch('/api/notifications/status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ patientHn: data.hn || '', status: 'นัดหมาย', patientName })
+                body: JSON.stringify({
+                    patientHn: data.hn || '',
+                    status: 'รอตรวจ',
+                    patientName,
+                    customSubject: 'เพิ่มผู้ป่วยใหม่',
+                    customMessage: '📋 เพิ่มผู้ป่วยใหม่ในระบบ'
+                })
             }).catch(err => console.error('Notification error:', err));
 
             return { success: true };
@@ -271,7 +293,27 @@ export class PatientService {
             };
 
             if (data.date) {
-                updateData.appointment_date = data.date;
+                const dateObj = new Date(data.date); // This is YYYY-MM-DD
+
+                if (data.time) {
+                    const [hours, minutes] = data.time.split(':').map(Number);
+                    dateObj.setHours(hours, minutes, 0, 0);
+                    // Adjust for timezone offset if needed, but since we want the time to be "as entered", 
+                    // we should likely treat it as local time.
+                    // However, new Date(YYYY-MM-DD) creates a UTC midnight date if formatted as ISO,
+                    // OR a local date if formatted as YYYY/MM/DD.
+                    // Let's rely on the input which is YYYY-MM-DD (local from previous tool call).
+                    // Actually, dateObj from "YYYY-MM-DD" is usually UTC midnight.
+                    // Let's reconstruct carefully.
+
+                    const [year, month, day] = data.date.split('-').map(Number);
+                    const localDate = new Date(year, month - 1, day, hours, minutes);
+
+                    // Store as ISO string (which converts to UTC)
+                    updateData.appointment_date = localDate.toISOString();
+                } else {
+                    updateData.appointment_date = data.date;
+                }
             }
 
             const { error } = await supabase
@@ -522,15 +564,60 @@ export class PatientService {
     static async deletePatient(hn: string): Promise<boolean> {
         try {
             console.log(`[PatientService] Deleting patient HN: ${hn}`);
-            const { error, count } = await supabase
+
+            // 1. Delete Status History (Child)
+            const { error: historyError } = await supabase
+                .from('status_history')
+                .delete()
+                .eq('patient_hn', hn);
+
+            if (historyError) {
+                console.warn(`[PatientService] Status history delete error (non-critical):`, historyError);
+                // Continue, as this might be non-critical or empty
+            }
+
+            // 2. Delete Responsibilities (Child)
+            const { error: respError } = await supabase
+                .from('patient_responsibility')
+                .delete()
+                .eq('patient_hn', hn);
+
+            if (respError) {
+                console.warn(`[PatientService] Responsibility delete error:`, respError);
+                // We try to continue, but if this failed due to OTHER constraints, next step might fail
+            }
+
+            // 3. Delete Appointments (Child)
+            const { error: apptError } = await supabase
+                .from('appointments')
+                .delete()
+                .eq('patient_hn', hn);
+
+            if (apptError) {
+                console.warn(`[PatientService] Appointments delete error:`, apptError);
+            }
+
+            // 4. Delete Lab Results (Child)
+            const { error: labError } = await supabase
+                .from('lab_results')
+                .delete()
+                .eq('hn', hn);
+
+            if (labError) {
+                console.warn(`[PatientService] Lab results delete error:`, labError);
+            }
+
+            // 5. Delete Patient (Parent)
+            const { error: deleteError } = await supabase
                 .from('patients')
                 .delete()
                 .eq('hn', hn);
 
-            if (error) {
-                console.error(`[PatientService] Delete error for HN ${hn}:`, error);
+            if (deleteError) {
+                console.error(`[PatientService] Delete error for HN ${hn}:`, deleteError);
                 return false;
             }
+
             console.log(`[PatientService] Deleted OK for HN ${hn}`);
             return true;
         } catch (error) {

@@ -16,6 +16,7 @@ export interface UserProfile {
     bio?: string;
     avatarUrl?: string;
     staffNumber?: string;
+    status?: string;
 }
 
 interface ProfileCardProps {

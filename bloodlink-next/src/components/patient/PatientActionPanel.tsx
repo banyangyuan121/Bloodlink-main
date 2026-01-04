@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import { Permissions, STATUS_ORDER } from '@/lib/permissions';
 import { useEffectiveRole } from '@/hooks/useEffectiveRole';
+import { CustomDatePicker } from '@/components/ui/CustomDatePicker';
+import { CustomTimePicker } from '@/components/ui/CustomTimePicker';
 
 // Status options for the modal - excludes 'รอตรวจ' normally, but shows it when in 'เสร็จสิ้น' for recheck
 const getStatusOptions = (currentStatus: string) => {
@@ -52,6 +54,11 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
     const handleUpdate = async () => {
         if (!nextAllowedStatus && !Permissions.isAdmin(effectiveRole)) {
             toast.error('คุณไม่มีสิทธิ์อัปเดตสถานะนี้');
+            return;
+        }
+
+        if (selectedStatus === 'นัดหมาย' && (!date || !time)) {
+            toast.error('กรุณาระบุวันที่และเวลานัดหมาย');
             return;
         }
 
@@ -166,8 +173,8 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
 
                         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-                        <div className="inline-block align-bottom bg-white dark:bg-[#1F2937] rounded-2xl text-left overflow-hidden shadow-xl dark:shadow-[0_10px_25px_rgba(0,0,0,0.5)] transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full border border-transparent dark:border-gray-700">
-                            <div className="bg-white dark:bg-[#1F2937] px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div className="inline-block align-bottom bg-white dark:bg-[#1F2937] rounded-2xl text-left shadow-xl dark:shadow-[0_10px_25px_rgba(0,0,0,0.5)] transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full border border-transparent dark:border-gray-700 flex flex-col">
+                            <div className="bg-white dark:bg-[#1F2937] px-4 pt-5 pb-4 sm:p-6 sm:pb-4 rounded-t-2xl">
                                 <div className="sm:flex sm:items-start">
                                     <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
                                         <h3 className="text-xl leading-6 font-bold text-gray-900 dark:text-white mb-4" id="modal-title">
@@ -222,27 +229,35 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
 
                                             {/* Appointment Date/Time - Only show if 'นัดหมาย' is selected */}
                                             {selectedStatus === 'นัดหมาย' && (
-                                                <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid grid-cols-2 gap-4 z-10">
                                                     <div>
                                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center">
                                                             <Calendar className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> วันที่
                                                         </label>
-                                                        <input
-                                                            type="date"
-                                                            value={date}
-                                                            onChange={(e) => setDate(e.target.value)}
-                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                        <CustomDatePicker
+                                                            value={date ? new Date(date) : undefined}
+                                                            onChange={(d) => {
+                                                                if (d) {
+                                                                    // Format as YYYY-MM-DD in local time
+                                                                    const year = d.getFullYear();
+                                                                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                                                                    const day = String(d.getDate()).padStart(2, '0');
+                                                                    setDate(`${year}-${month}-${day}`);
+                                                                } else {
+                                                                    setDate('');
+                                                                }
+                                                            }}
+                                                            placeholder="เลือกวันที่"
                                                         />
                                                     </div>
                                                     <div>
                                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center">
                                                             <Clock className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> เวลา
                                                         </label>
-                                                        <input
-                                                            type="time"
+                                                        <CustomTimePicker
                                                             value={time}
-                                                            onChange={(e) => setTime(e.target.value)}
-                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                            onChange={setTime}
+                                                            placeholder="เลือกเวลา"
                                                         />
                                                     </div>
                                                 </div>
@@ -265,7 +280,7 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
                                     </div>
                                 </div>
                             </div>
-                            <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                            <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-2xl">
                                 <button
                                     type="button"
                                     onClick={handleUpdate}

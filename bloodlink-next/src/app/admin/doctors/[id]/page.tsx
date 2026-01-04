@@ -2,7 +2,7 @@
 
 import { Header } from '@/components/layout/Header';
 
-import { ChevronLeft, Edit2, Loader2, Trash2, Save, User, Phone, Mail, Search } from 'lucide-react';
+import { ChevronLeft, Edit2, Loader2, Trash2, Save, User, Phone, Mail, Search, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
@@ -22,6 +22,7 @@ export default function DoctorDetailPage() {
     const [error, setError] = useState<string | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isEditRoleModalOpen, setIsEditRoleModalOpen] = useState(false);
+    const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const router = useRouter();
 
@@ -137,6 +138,31 @@ export default function DoctorDetailPage() {
         }
     };
 
+    const handleApproveUser = async () => {
+        try {
+            setSaving(true);
+            const res = await fetch(`/api/admin/users/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                // Sending status 'Approved' triggers the email in AuthService
+                body: JSON.stringify({ status: 'Approved' })
+            });
+
+            if (res.ok) {
+                setUser(prev => prev ? { ...prev, status: 'Approved' } : null);
+                setIsApproveModalOpen(false);
+                toast.success('อนุมัติผู้ใช้งานเรียบร้อยแล้ว');
+            } else {
+                toast.error('ไม่สามารถอนุมัติได้');
+            }
+        } catch (error) {
+            console.error('Approve error:', error);
+            toast.error('เกิดข้อผิดพลาด');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen bg-[#F3F4F6] dark:bg-[#0f1115]">
@@ -200,6 +226,16 @@ export default function DoctorDetailPage() {
 
                             {/* Action Buttons (Admin Only) */}
                             <div className="flex gap-2 mt-2">
+                                {/* Approve Button - Only if not approved */}
+                                {user?.status && !['approved', 'active', 'อนุมัติ', 'ใช้งาน'].includes(user.status.toLowerCase()) && (
+                                    <button
+                                        onClick={() => setIsApproveModalOpen(true)}
+                                        className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-full transition-all"
+                                        title="อนุมัติผู้ใช้งาน"
+                                    >
+                                        <CheckCircle className="w-4 h-4" />
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setIsEditRoleModalOpen(true)}
                                     className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-full transition-all"
@@ -223,7 +259,17 @@ export default function DoctorDetailPage() {
                                 <h2 className="text-[28px] font-bold text-[#1E1B4B] dark:text-white mb-1">
                                     {user.name} {user.surname}
                                 </h2>
-                                <p className="text-[#9CA3AF] dark:text-gray-400 text-lg font-medium">{user.position || user.role || 'เจ้าหน้าที่'}</p>
+                                <p className="text-[#9CA3AF] dark:text-gray-400 text-lg font-medium mb-3">{user.position || user.role || 'เจ้าหน้าที่'}</p>
+
+                                {/* Status Badge */}
+                                <div className="flex">
+                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${['approved', 'active', 'อนุมัติ', 'ใช้งาน'].includes(user.status?.toLowerCase() || '')
+                                            ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800'
+                                            : 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800'
+                                        }`}>
+                                        {user.status || 'รอตรวจสอบ'}
+                                    </span>
+                                </div>
                             </div>
 
                             {/* Bio Section */}
@@ -419,6 +465,38 @@ export default function DoctorDetailPage() {
                                 >
                                     {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                                     ลบผู้ใช้งาน
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {/* Approve Confirmation Modal */}
+                {isApproveModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                        <div className="bg-white dark:bg-[#1F2937] rounded-xl p-6 w-full max-w-sm shadow-xl border border-gray-200 dark:border-gray-700 text-center">
+                            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <CheckCircle className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">ยืนยันการอนุมัติ?</h3>
+                            <p className="text-gray-500 dark:text-gray-400 mb-6">
+                                คุณต้องการอนุมัติผู้ใช้งานรายนี้ใช่หรือไม่? <br />
+                                ระบบจะส่งอีเมลแจ้งเตือนไปยังผู้ใช้งานทันที
+                            </p>
+                            <div className="flex justify-center gap-3">
+                                <button
+                                    onClick={() => setIsApproveModalOpen(false)}
+                                    className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                                    disabled={saving}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    onClick={handleApproveUser}
+                                    disabled={saving}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                                >
+                                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                                    ยืนยันอนุมัติ
                                 </button>
                             </div>
                         </div>

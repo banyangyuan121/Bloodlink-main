@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { formatDateTimeThai } from '@/lib/utils';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 
 interface InboxMessage {
     id: string;
@@ -60,6 +61,20 @@ export default function InboxDetailPage() {
     const [message, setMessage] = useState<InboxMessage | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [replyText, setReplyText] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    // Confirm Modal State
+    const [confirmConfig, setConfirmConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        description: string;
+        action: () => Promise<void>;
+    }>({
+        isOpen: false,
+        title: '',
+        description: '',
+        action: async () => { }
+    });
 
     useEffect(() => {
         async function fetchMessage() {
@@ -90,9 +105,20 @@ export default function InboxDetailPage() {
     }, [params.id]);
 
     const handleDelete = async () => {
-        if (!confirm('ต้องการลบข้อความนี้?')) return;
-        // TODO: Implement delete API
-        router.push('/admin/inbox');
+        setConfirmConfig({
+            isOpen: true,
+            title: 'ยืนยันการลบข้อความ',
+            description: 'ต้องการลบข้อความนี้ใช่หรือไม่?',
+            action: async () => {
+                setIsDeleting(true);
+                // TODO: Implement delete API
+                // await fetch(`/api/admin/inbox/${params.id}`, { method: 'DELETE' });
+                // await new Promise(resolve => setTimeout(resolve, 500)); // Fake delay
+                router.push('/admin/inbox');
+                setIsDeleting(false);
+                setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+            }
+        });
     };
 
     if (isLoading) {
@@ -231,6 +257,17 @@ export default function InboxDetailPage() {
 
                 </div>
             </div>
+            <ConfirmModal
+                isOpen={confirmConfig.isOpen}
+                onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmConfig.action}
+                title={confirmConfig.title}
+                description={confirmConfig.description}
+                confirmText="ยืนยัน"
+                cancelText="ยกเลิก"
+                variant="danger"
+                isLoading={isDeleting}
+            />
         </div>
     );
 }

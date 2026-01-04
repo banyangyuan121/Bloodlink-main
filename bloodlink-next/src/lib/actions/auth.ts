@@ -2,6 +2,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { AuthService } from '@/lib/services/authService';
+import { EmailService } from '@/lib/services/emailService';
 import { randomUUID } from 'crypto';
 
 /**
@@ -19,7 +20,7 @@ export async function requestPasswordReset(email: string) {
 
         // 2. Generate Token
         const token = randomUUID();
-        const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+        const expiresAt = new Date(Date.now() + 1000 * 60 * 15); // 15 minutes
 
         // 3. Save to DB (user_tokens table)
         // using supabaseAdmin to bypass RLS or access protected table
@@ -37,15 +38,14 @@ export async function requestPasswordReset(email: string) {
             return { success: false, error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' };
         }
 
-        // 4. "Send" Email (Log to console)
-        const resetLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+        // 4. Send Email via EmailService
+        const emailResult = await EmailService.sendPasswordResetEmail(email, token);
 
-        console.log('---------------------------------------------------');
-        console.log(`[PASSWORD RESET] Email: ${email}`);
-        console.log(`[PASSWORD RESET] Link: ${resetLink}`);
-        console.log('---------------------------------------------------');
+        if (!emailResult.success) {
+            return { success: false, error: 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่อีกครั้ง' };
+        }
 
-        return { success: true, message: 'ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว (ตรวจสอบ Console)' };
+        return { success: true, message: 'ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว' };
 
     } catch (error) {
         console.error('requestPasswordReset error:', error);

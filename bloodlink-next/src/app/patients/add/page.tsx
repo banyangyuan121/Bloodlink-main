@@ -34,7 +34,7 @@ export default function AddPatientPage() {
             <div className="max-w-[1200px] w-full mx-auto flex flex-col items-center h-full">
                 <Header />
 
-                <div className="w-full max-w-[960px] pb-8 flex-1 overflow-y-auto custom-scrollbar">
+                <div className="w-full max-w-[960px] pb-8 pt-6 flex-1 overflow-y-auto custom-scrollbar">
                     <PatientForm
                         title="เพิ่มข้อมูลผู้ป่วย"
                         onConfirm={handleConfirm}

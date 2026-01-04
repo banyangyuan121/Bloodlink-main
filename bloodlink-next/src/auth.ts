@@ -45,7 +45,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     callbacks: {
         async jwt({ token, user }) {
             if (user) {
-                console.log('JWT Callback - User:', user); // DEBUG
+                // console.log('JWT Callback - User:', user); // DEBUG
                 token.role = (user as any).role;
                 token.status = (user as any).status;
                 token.userId = (user as any).userId;
@@ -54,7 +54,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return token;
         },
         async session({ session, token }) {
-            console.log('Session Callback - Token:', token); // DEBUG
+            // console.log('Session Callback - Token:', token); // DEBUG
             if (session.user) {
                 // Ensure manual mapping matches the types we defined
                 session.user.role = token.role as string;

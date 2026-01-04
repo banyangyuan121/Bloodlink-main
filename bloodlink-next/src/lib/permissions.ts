@@ -323,5 +323,15 @@ export const Permissions = {
     canBulkAssign: (role?: string) => {
         if (!role) return false;
         return Permissions.isAdmin(role) || Permissions.isDoctorOrNurse(role);
+    },
+
+    /**
+     * Can manage lab settings (Normal Ranges etc.)
+     * Lab Staff, Admin: YES
+     * Doctor/Nurse: NO (unless requested)
+     */
+    canManageLabSettings: (role?: string) => {
+        if (!role) return false;
+        return Permissions.isLabStaff(role) || Permissions.isAdmin(role);
     }
 };

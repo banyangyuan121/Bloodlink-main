@@ -118,7 +118,7 @@ export class LabService {
         }
     }
 
-    static async updateLabResult(hn: string, data: Partial<LabResult>): Promise<boolean> {
+    static async updateLabResult(hn: string, data: Partial<LabResult>): Promise<{ success: boolean; error?: string }> {
         try {
             // Map camelCase to snake_case for DB columns
             const dbData: any = {};
@@ -176,9 +176,9 @@ export class LabService {
 
                 if (insertError) {
                     console.error('Insert new lab result error:', insertError);
-                    return false;
+                    return { success: false, error: insertError.message };
                 }
-                return true;
+                return { success: true };
             }
 
             const { error } = await supabase
@@ -188,12 +188,12 @@ export class LabService {
 
             if (error) {
                 console.error('Update lab result error:', error);
-                return false;
+                return { success: false, error: error.message };
             }
-            return true;
-        } catch (error) {
+            return { success: true };
+        } catch (error: any) {
             console.error('Update lab result error:', error);
-            return false;
+            return { success: false, error: error.message || 'Unknown error' };
         }
     }
 }

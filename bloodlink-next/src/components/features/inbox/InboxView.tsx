@@ -7,11 +7,13 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import {
     Mail, Search, Send, AlertCircle, RefreshCw, MessageSquare, Bell, User,
-    ChevronLeft, ChevronRight, Trash2, Reply, MailOpen, Clock, Inbox, ArrowUpRight, CheckSquare, Square
+    ChevronLeft, ChevronRight, Trash2, Reply, MailOpen, Clock, Inbox, ArrowUpRight, CheckSquare, Square,
+    Check
 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { supabase } from '@/lib/supabase';
 import { useInbox } from '@/components/providers/InboxContext';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 
 interface InboxViewProps {
     role?: string;
@@ -36,6 +38,33 @@ function MessageSkeleton() {
 }
 
 export function InboxView({ role = 'user', title = 'กล่องข้อความ' }: InboxViewProps) {
+    // Helper to make URLs clickable
+    const linkify = (text: string) => {
+        const urlRegex = /(https?:\/\/[^\s]+)|(\/[^\s]+)/g;
+        return text.split(urlRegex).map((part, i) => {
+            if (part?.match(/^https?:\/\//)) {
+                return (
+                    <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        {part}
+                    </a>
+                );
+            }
+            // Handle internal links starting with /
+            if (part?.match(/^\//)) {
+                // Ensure it's not just a slash or part of text
+                // Simple heuristic: if it looks like a path
+                if (part.length > 1 && !part.includes(' ')) {
+                    return (
+                        <a key={i} href={part} className="text-blue-600 hover:underline">
+                            {part}
+                        </a>
+                    );
+                }
+            }
+            return part;
+        });
+    };
+
     const { refreshUnreadCount } = useInbox();
     const { data: session, status } = useSession();
     const [messages, setMessages] = useState<Message[]>([]);
@@ -46,6 +75,19 @@ export function InboxView({ role = 'user', title = 'กล่องข้อค�
     const [filterType, setFilterType] = useState<string>('all');
     const [isDeleting, setIsDeleting] = useState(false);
     const [replyTo, setReplyTo] = useState<Message | null>(null);
+
+    // Confirm Modal State
+    const [confirmConfig, setConfirmConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        description: string;
+        action: () => Promise<void>;
+    }>({
+        isOpen: false,
+        title: '',
+        description: '',
+        action: async () => { }
+    });
 
     // Pagination & Multi-select
     const [currentPage, setCurrentPage] = useState(1);
@@ -120,22 +162,29 @@ export function InboxView({ role = 'user', title = 'กล่องข้อค�
     };
 
     const handleDelete = async (messageId: string) => {
-        if (!confirm('ต้องการลบข้อความนี้หรือไม่?')) return;
-        setIsDeleting(true);
-        try {
-            const res = await fetch(`/api/messages/${messageId}`, { method: 'DELETE' });
-            if (res.ok) {
-                setMessages(prev => prev.filter(m => m.id !== messageId));
-                if (selectedMessage?.id === messageId) {
-                    setSelectedMessage(null);
+        setConfirmConfig({
+            isOpen: true,
+            title: 'ยืนยันการลบข้อความ',
+            description: 'คุณต้องการลบข้อความนี้หรือไม่? การกระทำนี้ไม่สามารถเรียกคืนได้',
+            action: async () => {
+                setIsDeleting(true);
+                try {
+                    const res = await fetch(`/api/messages/${messageId}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        setMessages(prev => prev.filter(m => m.id !== messageId));
+                        if (selectedMessage?.id === messageId) {
+                            setSelectedMessage(null);
+                        }
+                        refreshUnreadCount();
+                    }
+                } catch (err) {
+                    console.error('Failed to delete:', err);
+                } finally {
+                    setIsDeleting(false);
+                    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
                 }
-                refreshUnreadCount();
             }
-        } catch (err) {
-            console.error('Failed to delete:', err);
-        } finally {
-            setIsDeleting(false);
-        }
+        });
     };
 
     const handleMarkAsUnread = async (messageId: string) => {
@@ -222,45 +271,61 @@ export function InboxView({ role = 'user', title = 'กล่องข้อค�
 
     const handleBulkDelete = async () => {
         if (selectedIds.size === 0) return;
-        if (!confirm(`ต้องการลบ ${selectedIds.size} ข้อความที่เลือกหรือไม่?`)) return;
-        setIsDeleting(true);
-        try {
-            await Promise.all(
-                Array.from(selectedIds).map(id =>
-                    fetch(`/api/messages/${id}`, { method: 'DELETE' })
-                )
-            );
-            setMessages(prev => prev.filter(m => !selectedIds.has(m.id)));
-            setSelectedIds(new Set());
-            setSelectedMessage(null);
-            refreshUnreadCount();
-        } catch (err) {
-            console.error('Bulk delete error:', err);
-        } finally {
-            setIsDeleting(false);
-        }
+
+        setConfirmConfig({
+            isOpen: true,
+            title: 'ยืนยันการลบแบบกลุ่ม',
+            description: `ต้องการลบ ${selectedIds.size} ข้อความที่เลือกหรือไม่?`,
+            action: async () => {
+                setIsDeleting(true);
+                try {
+                    await Promise.all(
+                        Array.from(selectedIds).map(id =>
+                            fetch(`/api/messages/${id}`, { method: 'DELETE' })
+                        )
+                    );
+                    setMessages(prev => prev.filter(m => !selectedIds.has(m.id)));
+                    setSelectedIds(new Set());
+                    setSelectedMessage(null);
+                    refreshUnreadCount();
+                } catch (err) {
+                    console.error('Bulk delete error:', err);
+                } finally {
+                    setIsDeleting(false);
+                    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                }
+            }
+        });
     };
 
     const handleDeleteAllRead = async () => {
         const readMessages = messages.filter(m => m.is_read);
         if (readMessages.length === 0) return;
-        if (!confirm(`ต้องการลบ ${readMessages.length} ข้อความที่อ่านแล้วทั้งหมดหรือไม่?`)) return;
-        setIsDeleting(true);
-        try {
-            await Promise.all(
-                readMessages.map(m =>
-                    fetch(`/api/messages/${m.id}`, { method: 'DELETE' })
-                )
-            );
-            setMessages(prev => prev.filter(m => !m.is_read));
-            setSelectedIds(new Set());
-            setSelectedMessage(null);
-            refreshUnreadCount();
-        } catch (err) {
-            console.error('Delete all read error:', err);
-        } finally {
-            setIsDeleting(false);
-        }
+
+        setConfirmConfig({
+            isOpen: true,
+            title: 'ลบข้อความที่อ่านแล้ว',
+            description: `ต้องการลบ ${readMessages.length} ข้อความที่อ่านแล้วทั้งหมดหรือไม่?`,
+            action: async () => {
+                setIsDeleting(true);
+                try {
+                    await Promise.all(
+                        readMessages.map(m =>
+                            fetch(`/api/messages/${m.id}`, { method: 'DELETE' })
+                        )
+                    );
+                    setMessages(prev => prev.filter(m => !m.is_read));
+                    setSelectedIds(new Set());
+                    setSelectedMessage(null);
+                    refreshUnreadCount();
+                } catch (err) {
+                    console.error('Delete all read error:', err);
+                } finally {
+                    setIsDeleting(false);
+                    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                }
+            }
+        });
     };
 
     const getTypeIcon = (type: string) => {
@@ -606,7 +671,7 @@ export function InboxView({ role = 'user', title = 'กล่องข้อค�
                         <div className="flex-1 p-4 md:p-6 overflow-y-auto">
                             <div className="prose dark:prose-invert max-w-none">
                                 <p className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 leading-relaxed text-[15px]">
-                                    {selectedMessage.content}
+                                    {linkify(selectedMessage.content)}
                                 </p>
                             </div>
                         </div>
@@ -670,6 +735,18 @@ export function InboxView({ role = 'user', title = 'กล่องข้อค�
                 }}
                 currentUserId={userId || ''}
                 currentUserRole={role}
+            />
+
+            <ConfirmModal
+                isOpen={confirmConfig.isOpen}
+                onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmConfig.action}
+                title={confirmConfig.title}
+                description={confirmConfig.description}
+                confirmText="ยืนยัน"
+                cancelText="ยกเลิก"
+                variant="danger"
+                isLoading={isDeleting}
             />
         </div>
     );

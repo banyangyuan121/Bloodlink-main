@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { Patient } from '@/types';
 import { useSession } from 'next-auth/react';
 import { Permissions } from '@/lib/permissions';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface PatientFormProps {
     initialData?: Partial<Patient>;
@@ -26,7 +27,7 @@ export function PatientForm({ initialData = {}, onCancel, onConfirm, title = "�
         : Permissions.canAddPatient(role);
 
     const [formData, setFormData] = useState<Partial<Patient>>({
-        testType: initialData.testType || '',
+        testType: initialData.testType || 'ตรวจเลือดทั่วไป (CBC)',
         name: initialData.name || '',
         surname: initialData.surname || '',
         hn: initialData.hn || '',
@@ -41,19 +42,46 @@ export function PatientForm({ initialData = {}, onCancel, onConfirm, title = "�
         status: initialData.status || 'ใช้งาน'
     });
 
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+        // Clear error when user types
+        if (errors[name]) {
+            setErrors(prev => ({ ...prev, [name]: '' }));
+        }
+    };
+
+    const validate = () => {
+        const newErrors: Record<string, string> = {};
+
+        if (!formData.testType) newErrors.testType = 'กรุณาเลือกประเภทการตรวจ';
+        if (!formData.name?.trim()) newErrors.name = 'กรุณากรอกชื่อ';
+        if (!formData.surname?.trim()) newErrors.surname = 'กรุณากรอกนามสกุล';
+        if (!formData.hn?.trim()) {
+            newErrors.hn = 'กรุณากรอก HN';
+        } else if (formData.hn.length !== 9) {
+            newErrors.hn = 'HN ต้องมี 9 หลัก';
+        }
+        if (!formData.bloodType) newErrors.bloodType = 'กรุณาเลือกหมู่เลือด';
+        if (!formData.age?.trim()) newErrors.age = 'กรุณากรอกอายุ';
+        else if (isNaN(Number(formData.age))) newErrors.age = 'อายุต้องเป็นตัวเลขเท่านั้น';
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onConfirm?.(formData);
-    };
+        console.log('Submitting form data:', formData); // Debug log
 
-    // If no permission, showing the form (likely read-only or error)
-    // The requirement says: "part that cannot access will not see to edit"
-    // We will disable all inputs if !canEdit
+        if (validate()) {
+            onConfirm?.(formData);
+        } else {
+            console.log('Validation failed', errors);
+        }
+    };
 
     return (
         <div className="w-full flex justify-center items-start font-[family-name:var(--font-kanit)]">
@@ -62,22 +90,20 @@ export function PatientForm({ initialData = {}, onCancel, onConfirm, title = "�
 
                 <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                     {/* Exam Type */}
-                    <div className="flex flex-col gap-1.5 absolute top-8 right-10 w-[250px]">
-                        <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">ประเภทการตรวจ</label>
-                        <div className="relative">
-                            <select
-                                name="testType"
-                                value={formData.testType}
-                                onChange={handleChange}
-                                disabled={!canEdit}
-                                className="w-full p-[10px_14px] pr-10 rounded-[12px] border border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB] dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white appearance-none focus:outline-none focus:border-[#6366F1] focus:ring-1 focus:ring-[#6366F1]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <option value="">กรุณาเลือกประเภทการตรวจ</option>
-                                <option value="ตรวจเลือดทั่วไป (CBC)">ตรวจเลือดทั่วไป (CBC)</option>
-                                <option value="ตรวจสุขภาพประจำปี">ตรวจสุขภาพประจำปี</option>
-                            </select>
-                            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] dark:text-gray-400 w-4 h-4 pointer-events-none" />
-                        </div>
+                    <div className="flex flex-col gap-1.5 absolute top-8 right-10 w-[250px] z-20">
+                        <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">
+                            ประเภทการตรวจ <span className="text-red-500">*</span>
+                        </label>
+                        <CustomSelect
+                            value={formData.testType || ''}
+                            onChange={(val) => setFormData(prev => ({ ...prev, testType: val }))}
+                            options={[
+                                { label: 'ตรวจเลือดทั่วไป (CBC)', value: 'ตรวจเลือดทั่วไป (CBC)' }
+                            ]}
+                            disabled={!canEdit}
+                            placeholder="กรุณาเลือกประเภทการตรวจ"
+                            error={errors.testType}
+                        />
                     </div>
 
                     {/* Section: Name */}
@@ -88,14 +114,32 @@ export function PatientForm({ initialData = {}, onCancel, onConfirm, title = "�
 
                         <div className="grid grid-cols-2 gap-8">
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">ชื่อ</label>
-                                <input type="text" name="name" value={formData.name} onChange={handleChange} disabled={!canEdit} className="w-full p-[10px_14px] rounded-[12px] border border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB] dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white focus:outline-none focus:border-[#6366F1] transition-all disabled:opacity-50 disabled:cursor-not-allowed" />
-                                <span className="text-[11px] text-[#9CA3AF] dark:text-gray-500">กรุณาใส่เฉพาะชื่อ</span>
+                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">
+                                    ชื่อ <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    value={formData.name}
+                                    onChange={handleChange}
+                                    disabled={!canEdit}
+                                    className={`w-full p-[10px_14px] rounded-[12px] border ${errors.name ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB]'} dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white focus:outline-none focus:border-[#6366F1] transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                                />
+                                {errors.name && <span className="text-red-500 text-[11px]">{errors.name}</span>}
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">นามสกุล</label>
-                                <input type="text" name="surname" value={formData.surname} onChange={handleChange} disabled={!canEdit} className="w-full p-[10px_14px] rounded-[12px] border border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB] dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white focus:outline-none focus:border-[#6366F1] transition-all disabled:opacity-50 disabled:cursor-not-allowed" />
-                                <span className="text-[11px] text-[#9CA3AF] dark:text-gray-500">กรุณาใส่เฉพาะนามสกุล</span>
+                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">
+                                    นามสกุล <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="surname"
+                                    value={formData.surname}
+                                    onChange={handleChange}
+                                    disabled={!canEdit}
+                                    className={`w-full p-[10px_14px] rounded-[12px] border ${errors.surname ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB]'} dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white focus:outline-none focus:border-[#6366F1] transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                                />
+                                {errors.surname && <span className="text-red-500 text-[11px]">{errors.surname}</span>}
                             </div>
                         </div>
                     </div>
@@ -109,34 +153,87 @@ export function PatientForm({ initialData = {}, onCancel, onConfirm, title = "�
                         <div className="grid grid-cols-2 gap-x-8 gap-y-6">
                             {/* HN */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">HN</label>
-                                <input type="text" name="hn" value={formData.hn} onChange={handleChange} disabled={!canEdit} className="w-full p-[10px_14px] rounded-[12px] border border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB] dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white focus:outline-none focus:border-[#6366F1] transition-all disabled:opacity-50 disabled:cursor-not-allowed" />
+                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">
+                                    HN <span className="text-red-500">*</span>
+                                    {formData.hn?.length === 9 && (
+                                        <span className="ml-2 text-green-500 text-xs font-medium">✓ ครบ 9 หลัก</span>
+                                    )}
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        name="hn"
+                                        value={formData.hn}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            // Only allow numbers and max 9 digits
+                                            if (/^\d*$/.test(value) && value.length <= 9) {
+                                                handleChange(e);
+                                            }
+                                        }}
+                                        disabled={!canEdit}
+                                        maxLength={9}
+                                        placeholder="ตัวเลข 9 หลัก"
+                                        className={`w-full p-[10px_14px] rounded-[12px] border ${errors.hn
+                                            ? 'border-red-500 bg-red-50'
+                                            : formData.hn?.length === 9
+                                                ? 'border-green-500 bg-green-50/10'
+                                                : 'border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB]'
+                                            } dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white focus:outline-none focus:border-[#6366F1] transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    />
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
+                                        {formData.hn?.length || 0}/9
+                                    </div>
+                                </div>
+                                {errors.hn && <span className="text-red-500 text-[11px]">{errors.hn}</span>}
                             </div>
 
                             {/* Blood Type */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">หมู่เลือด</label>
-                                <div className="relative">
-                                    <select name="bloodType" value={formData.bloodType} onChange={handleChange} disabled={!canEdit} className="w-full p-[10px_14px] pr-10 rounded-[12px] border border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB] dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white appearance-none focus:outline-none focus:border-[#6366F1] disabled:opacity-50 disabled:cursor-not-allowed">
-                                        <option value="">เลือกหมู่เลือด</option>
-                                        <option value="A+">A+</option>
-                                        <option value="A-">A-</option>
-                                        <option value="B+">B+</option>
-                                        <option value="B-">B-</option>
-                                        <option value="AB+">AB+</option>
-                                        <option value="AB-">AB-</option>
-                                        <option value="O+">O+</option>
-                                        <option value="O-">O-</option>
-                                    </select>
-                                    <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] dark:text-gray-400 w-4 h-4 pointer-events-none" />
-                                </div>
+                            <div className="flex flex-col gap-1.5 z-10">
+                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">
+                                    หมู่เลือด <span className="text-red-500">*</span>
+                                </label>
+                                <CustomSelect
+                                    value={formData.bloodType || ''}
+                                    onChange={(val) => {
+                                        setFormData(prev => ({ ...prev, bloodType: val }));
+                                        if (errors.bloodType) setErrors(prev => ({ ...prev, bloodType: '' }));
+                                    }}
+                                    options={[
+                                        { value: 'A+', label: 'A+' },
+                                        { value: 'A-', label: 'A-' },
+                                        { value: 'B+', label: 'B+' },
+                                        { value: 'B-', label: 'B-' },
+                                        { value: 'AB+', label: 'AB+' },
+                                        { value: 'AB-', label: 'AB-' },
+                                        { value: 'O+', label: 'O+' },
+                                        { value: 'O-', label: 'O-' }
+                                    ]}
+                                    disabled={!canEdit}
+                                    placeholder="เลือกหมู่เลือด"
+                                    error={errors.bloodType}
+                                    triggerClassName="rounded-[12px] bg-[#F9FAFB] dark:bg-[#374151] border-[#E5E7EB] dark:border-gray-600 p-[10px_14px] h-auto"
+                                />
                             </div>
 
                             {/* Age */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">อายุ</label>
-                                <input type="text" name="age" value={formData.age} onChange={handleChange} disabled={!canEdit} className="w-full p-[10px_14px] rounded-[12px] border border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB] dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white focus:outline-none focus:border-[#6366F1] transition-all disabled:opacity-50 disabled:cursor-not-allowed" />
-                                <span className="text-[11px] text-[#9CA3AF] dark:text-gray-500">ใส่อายุเป็นตัวเลข</span>
+                                <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">
+                                    อายุ <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="age"
+                                    value={formData.age}
+                                    onChange={handleChange}
+                                    disabled={!canEdit}
+                                    className={`w-full p-[10px_14px] rounded-[12px] border ${errors.age ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB] dark:border-gray-600 bg-[#F9FAFB]'} dark:bg-[#374151] text-[14px] text-[#111827] dark:text-white focus:outline-none focus:border-[#6366F1] transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                                />
+                                {errors.age ? (
+                                    <span className="text-red-500 text-[11px]">{errors.age}</span>
+                                ) : (
+                                    <span className="text-[11px] text-[#9CA3AF] dark:text-gray-500">ใส่อายุเป็นตัวเลข</span>
+                                )}
                             </div>
 
                             {/* Gender */}
@@ -198,7 +295,7 @@ export function PatientForm({ initialData = {}, onCancel, onConfirm, title = "�
                             ยกเลิก
                         </button>
                         {canEdit && (
-                            <button type="submit" className="px-8 py-2.5 rounded-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[14px] font-semibold shadow-[0_12px_20px_rgba(37,99,235,0.35)] dark:shadow-[0_12px_20px_rgba(37,99,235,0.2)] active:translate-y-px transition-all">
+                            <button type="submit" className="px-8 py-2.5 rounded-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[14px] font-semibold shadow-[0_12px_20px_rgba(37,99,235,0.35)] dark:shadow-[0_12px_20px_rgba(37,99,235,0.2)] active:translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                                 ยืนยัน
                             </button>
                         )}

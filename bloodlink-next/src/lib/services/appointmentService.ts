@@ -9,6 +9,7 @@ interface DBAppointment {
     patient_hn: string | null;
     description: string | null;
     created_at: string | null;
+    status?: string | null; // Optional status column
 }
 
 export interface Appointment {
@@ -16,7 +17,7 @@ export interface Appointment {
     patient_hn: string;
     appointment_date: string; // From start_time
     appointment_time: string; // From start_time
-    status: 'pending' | 'completed' | 'cancelled' | 'no_show'; // Artificial (not in DB yet)
+    status: 'pending' | 'completed' | 'cancelled' | 'no_show';
     type: string; // Mapped to title
     note?: string; // Mapped to description
     created_at?: string;
@@ -49,6 +50,9 @@ export class AppointmentService {
                     time = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false });
                 }
 
+                // Use end_time as completion indicator
+                const status = row.end_time ? 'completed' : 'pending';
+
                 return {
                     id: row.id,
                     patient_hn: row.patient_hn || '',
@@ -56,7 +60,7 @@ export class AppointmentService {
                     appointment_time: time,
                     type: row.title || 'นัดหมายทั่วไป',
                     note: row.description || '',
-                    status: 'pending', // Default as table lacks status column
+                    status: status,
                     created_at: row.created_at || ''
                 };
             });
@@ -86,7 +90,8 @@ export class AppointmentService {
                 title: data.type || 'นัดหมาย',
                 description: data.note,
                 start_time: start_time,
-                // end_time: start_time + 1 hour? Optional
+                // STATUS REMOVED: Table does not have status column.
+                // New pending appointments have null end_time by default.
             };
 
             const { error: insertError } = await supabase
@@ -116,6 +121,36 @@ export class AppointmentService {
         } catch (error) {
             console.error('Error creating appointment:', error);
             return { success: false, error: 'System error' };
+        }
+    }
+
+    /**
+     * Update appointment status
+     * Uses end_time to mark completion
+     */
+    static async updateStatus(id: string, status: string): Promise<boolean> {
+        try {
+            const updateData: any = { updated_at: new Date().toISOString() };
+
+            if (status === 'completed') {
+                updateData.end_time = new Date().toISOString(); // Set end_time to now
+            } else if (status === 'pending') {
+                updateData.end_time = null; // Clear end_time
+            }
+
+            const { error } = await supabase
+                .from('appointments')
+                .update(updateData)
+                .eq('id', id);
+
+            if (error) {
+                console.error('Update status error:', error);
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.error('Update status error:', error);
+            return false;
         }
     }
 }

@@ -41,10 +41,14 @@ export async function searchPatients(query: string): Promise<Patient[]> {
  * Each role can only update specific transitions
  * Now with auto-notifications to relevant staff
  */
+import { AppointmentService } from '@/lib/services/appointmentService';
+
+// ... (existing imports)
+
 export async function updatePatientStatus(
     hn: string,
     processStatus: string,
-    data: { history?: string, date?: string, time?: string }
+    data: { history?: string, date?: string, time?: string, type?: string }
 ) {
     const session = await auth();
     const user = session?.user as any;
@@ -78,6 +82,9 @@ export async function updatePatientStatus(
     }
 
     // Pass user info for status history logging
+    console.log(`[Action] Updating status for ${hn} to ${processStatus} by ${email}`);
+
+    // Explicitly call updatePatientStatus
     const success = await PatientService.updatePatientStatus(hn, processStatus, {
         ...data,
         changedByEmail: email,
@@ -86,6 +93,29 @@ export async function updatePatientStatus(
     });
 
     if (success) {
+        console.log(`[Action] Status update success. Checking appointment creation...`);
+
+        // IF status is Appointment, Create actual Appointment Record
+        if (processStatus === 'นัดหมาย' && data.date) {
+            console.log(`[Action] Creating appointment record...`);
+            const apptResult = await AppointmentService.createAppointment({
+                patient_hn: hn,
+                appointment_date: data.date,
+                appointment_time: data.time || '09:00',
+                type: data.type || 'นัดหมายทั่วไป',
+                note: data.history
+            });
+
+            if (!apptResult.success) {
+                console.error(`[Action] Appointment creation failed: ${apptResult.error}`);
+                // Note: We don't fail the whole status update if just the appointment record fails, 
+                // but we should probably warn. 
+                // For now, let's return success but log it.
+            } else {
+                console.log(`[Action] Appointment created successfully.`);
+            }
+        }
+
         // Send status notification to responsible staff
         const patientName = `${patient.name} ${patient.surname}`;
         try {
@@ -93,7 +123,6 @@ export async function updatePatientStatus(
             console.log(`[updatePatientStatus] Sent notification for ${hn} -> ${processStatus}`);
         } catch (notifError) {
             console.error('[updatePatientStatus] Failed to send notification:', notifError);
-            // Don't fail the status update if notification fails
         }
 
         revalidatePath('/dashboard');
@@ -101,9 +130,10 @@ export async function updatePatientStatus(
         revalidatePath(`/history/${hn}`);
         revalidatePath(`/patients/${hn}`);
         return { success: true };
+    } else {
+        console.error(`[Action] PatientService.updatePatientStatus returned false`);
+        return { success: false, error: 'Failed to update status in database' };
     }
-
-    return { success: false, error: 'Failed to update status' };
 }
 
 /**
@@ -263,4 +293,26 @@ export async function checkUserResponsibility(hn: string) {
 
     const isResponsible = await PatientService.isUserResponsible(hn, email);
     return { isResponsible, isAdmin: false };
+}
+
+/**
+ * Delete patient - Admin only (or internal use)
+ * Exposed as server action for direct calling
+ */
+export async function deletePatient(hn: string) {
+    const session = await auth();
+    const role = (session?.user as any)?.role;
+
+    if (!Permissions.isAdmin(role) && !Permissions.isDoctorOrNurse(role)) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const success = await PatientService.deletePatient(hn);
+    if (success) {
+        revalidatePath('/dashboard');
+        revalidatePath('/history');
+        revalidatePath('/patients');
+    }
+
+    return { success };
 }

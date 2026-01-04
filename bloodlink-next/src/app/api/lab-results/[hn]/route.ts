@@ -48,11 +48,11 @@ export async function PATCH(
         //     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         // }
 
-        const success = await LabService.updateLabResult(hn, body);
+        const result = await LabService.updateLabResult(hn, body);
 
-        if (!success) {
+        if (!result.success) {
             return NextResponse.json(
-                { error: 'Failed to update lab results' },
+                { error: result.error || 'Failed to update lab results' },
                 { status: 500 }
             );
         }

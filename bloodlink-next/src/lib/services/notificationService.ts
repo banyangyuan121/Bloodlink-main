@@ -3,7 +3,7 @@ import { MessageService } from './messageService';
 
 // Status to notification message mapping with emojis
 const STATUS_MESSAGES: Record<string, string> = {
-    'รอตรวจ': '📋 เพิ่มผู้ป่วยใหม่ในระบบ',
+    'รอตรวจ': '📋 สถานะ: รอตรวจ',
     'นัดหมาย': '📅 นัดหมายเจาะเลือดเรียบร้อย',
     'เจาะเลือด': '💉 เจาะเลือดเสร็จสิ้น รอส่งตรวจ',
     'กำลังจัดส่ง': '🚚 กำลังจัดส่งตัวอย่างไปห้องปฏิบัติการ',
@@ -22,18 +22,20 @@ export class NotificationService {
     static async sendStatusNotification(
         patientHn: string,
         status: string,
-        patientName: string
+        patientName: string,
+        customSubject?: string,
+        customMessage?: string
     ): Promise<{ success: boolean; notifiedCount: number; error?: string }> {
         try {
             // 1. Get the notification message for this status
-            const baseMessage = STATUS_MESSAGES[status];
+            const baseMessage = customMessage || STATUS_MESSAGES[status];
             if (!baseMessage) {
                 console.log(`No notification message defined for status: ${status}`);
                 return { success: true, notifiedCount: 0 };
             }
 
             // Add link to results page for statuses where editing/viewing results is relevant
-            const resultsLink = `/result-detail/${patientHn}`;
+            const resultsLink = `/results/${patientHn}`;
             let fullMessage = `${baseMessage}: ${patientName} (HN: ${patientHn})`;
 
             // Add specific action messages based on status
@@ -43,7 +45,9 @@ export class NotificationService {
                 fullMessage += `\n\n📊 ดูผลตรวจ: ${resultsLink}`;
             }
 
-            const subject = `อัปเดตสถานะผู้ป่วย - ${status}`;
+
+
+            const subject = customSubject || `อัปเดตสถานะผู้ป่วย - ${status}`;
 
             // 2. Get responsible staff for this patient
             const { data: responsibilities, error: respError } = await supabaseAdmin

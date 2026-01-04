@@ -11,7 +11,7 @@ interface RoleGuardProps {
 }
 
 // Public paths that don't require role validation
-const PUBLIC_PATHS = ['/login', '/register', '/', '/forgot-password', '/reset-password'];
+const PUBLIC_PATHS = ['/login', '/register', '/', '/forgot-password', '/reset-password', '/privacy-policy'];
 
 /**
  * RoleGuard component checks if the logged-in user has a valid role.
@@ -50,13 +50,10 @@ export function RoleGuard({ children }: RoleGuardProps) {
         if (status === 'authenticated') {
             const userRole = session?.user?.role;
 
-            // If role is not yet in session, try to refresh session
-            // This can happen right after login before JWT callback populates role
+            // If role is missing, we treat it as an invalid role instead of looping forever
             if (userRole === undefined || userRole === null) {
-                // Try refreshing the session once
-                update();
-                // Keep loading state - wait for session update
-                setRoleStatus('loading');
+                console.warn('User authenticated but no role found in session');
+                setRoleStatus('invalid');
                 return;
             }
 
@@ -73,7 +70,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
     // Show loading while checking
     if (roleStatus === 'loading' && !isPublicPath) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+            <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 font-[family-name:var(--font-kanit)]">
                 <div className="flex flex-col items-center gap-4">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
                     <p className="text-gray-500 dark:text-gray-400">กำลังตรวจสอบสิทธิ์...</p>

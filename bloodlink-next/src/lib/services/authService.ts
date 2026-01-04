@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from '@/lib/supabase';
 import { User } from '@/types';
+import { EmailService } from '@/lib/services/emailService';
 import bcrypt from 'bcryptjs';
 
 export class AuthService {
@@ -122,6 +123,9 @@ export class AuthService {
                 return { success: false, error: 'Registration failed: ' + error.message };
             }
 
+            // Send Welcome Email
+            await EmailService.sendWelcomeEmail(data.email, data.name);
+
             return { success: true };
         } catch (error) {
             console.error('Registration error:', error);
@@ -161,7 +165,8 @@ export class AuthService {
                 .from('users')
                 .select('*')
                 .in('role', roles)
-                .eq('status', 'approved') // Only fetching approved staff
+                .in('role', roles)
+                .in('status', ['approved', 'Approved', 'อนุมัติ', 'ใช้งาน', 'Active', 'active']) // Only fetching approved staff
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -363,6 +368,36 @@ export class AuthService {
             return true;
         } catch (error) {
             console.error('Update user bio error:', error);
+            return false;
+        }
+    }
+
+    static async updateUserStatus(userId: string, status: string): Promise<boolean> {
+        try {
+            // Update status in DB
+            const { error, data } = await supabase
+                .from('users')
+                .update({ status, updated_at: new Date().toISOString() })
+                .eq('id', userId)
+                .select('email, name')
+                .single();
+
+            if (error) {
+                console.error('Update user status error:', error);
+                return false;
+            }
+
+            // Check if status is Approved -> Send Email
+            const approvedKeywords = ['approved', 'อนุมัติ', 'active', 'ใช้งาน'];
+            if (approvedKeywords.includes(status.toLowerCase()) && data?.email) {
+                console.log(`User ${data.email} approved. Sending notification email...`);
+                // Fire and forget email to not block response
+                EmailService.sendAccountApprovedEmail(data.email, data.name || 'Staff');
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Update user status error:', error);
             return false;
         }
     }

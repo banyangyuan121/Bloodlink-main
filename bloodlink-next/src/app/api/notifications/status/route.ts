@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { patientHn, status, patientName } = body;
+        const { patientHn, status, patientName, customSubject, customMessage } = body;
 
         if (!patientHn || !status || !patientName) {
             return NextResponse.json(
@@ -19,12 +19,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log('Notification API called:', { patientHn, status, patientName });
+        console.log('Notification API called:', { patientHn, status, patientName, customSubject, customMessage });
 
         const result = await NotificationService.sendStatusNotification(
             patientHn,
             status,
-            patientName
+            patientName,
+            customSubject,
+            customMessage
         );
 
         console.log('Notification result:', result);

@@ -40,6 +40,10 @@ import {
 import { formatDateThai } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { CustomSelect } from '@/components/ui/CustomSelect';
+import { CustomDatePicker } from '@/components/ui/CustomDatePicker';
+import { CustomTimePicker } from '@/components/ui/CustomTimePicker';
 
 // Timeline icons mapping
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -104,6 +108,8 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
     const [statusNote, setStatusNote] = useState('');
     const [appointmentDate, setAppointmentDate] = useState('');
     const [appointmentTime, setAppointmentTime] = useState('');
+    const [appointmentType, setAppointmentType] = useState('Check-up'); // Default type
+    const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
     const [isUpdating, setIsUpdating] = useState(false);
 
     // Responsibility State
@@ -125,8 +131,15 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                 .then(data => {
                     if (data.staff) {
                         // Filter doctors and nurses
-                        const doctors = data.staff.filter((u: any) => u.role.includes('แพทย์') || u.role.toLowerCase().includes('doctor'));
-                        const nurses = data.staff.filter((u: any) => u.role.includes('พยาบาล') || u.role.toLowerCase().includes('nurse'));
+                        // Filter doctors and nurses with loose matching
+                        const doctors = data.staff.filter((u: any) => {
+                            const r = (u.role || '').toLowerCase().trim();
+                            return r.includes('แพทย์') || r.includes('doctor') || r.includes('med') || r === 'admin'; // Temporarily showing admin in doctors for visibility
+                        });
+                        const nurses = data.staff.filter((u: any) => {
+                            const r = (u.role || '').toLowerCase().trim();
+                            return r.includes('พยาบาล') || r.includes('nurse');
+                        });
                         setStaffList({ doctors, nurses });
                     }
                 })
@@ -139,7 +152,6 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
     const [appointmentHistory, setAppointmentHistory] = useState<Appointment[]>([]);
 
     // Delete State
-    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const router = useRouter();
 
@@ -166,6 +178,22 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
 
     // Tab State
     const [activeTab, setActiveTab] = useState<'appointments' | 'labs'>('appointments');
+
+    // Confirm Modal Config
+    const [confirmConfig, setConfirmConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        description: string;
+        action: () => Promise<void>;
+        variant?: 'danger' | 'warning' | 'primary';
+        confirmText?: string;
+    }>({
+        isOpen: false,
+        title: '',
+        description: '',
+        action: async () => { },
+        variant: 'danger',
+    });
 
     useEffect(() => {
         async function fetchPatient() {
@@ -209,11 +237,17 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                 setTempStatus(mapped.process);
 
                 // Fetch Appointment History
-                const appHistory = await AppointmentService.getAppointmentsByHn(hn);
+                let appHistory = await AppointmentService.getAppointmentsByHn(hn);
+
+                // Mock data removed
+
                 setAppointmentHistory(appHistory);
 
                 // Fetch Lab History
-                const labHist = await LabService.getLabHistory(hn);
+                let labHist = await LabService.getLabHistory(hn);
+
+                // Mock data removed
+
                 setLabHistory(labHist);
 
             } catch (err) {
@@ -290,26 +324,44 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
 
     // Handle remove responsible person
     const handleRemoveResponsible = async (targetEmail: string) => {
-        if (!confirm('คุณต้องการลบตัวเองออกจากความรับผิดชอบผู้ป่วยรายนี้หรือไม่?')) return;
-        try {
-            const response = await fetch(`/api/patients/${hn}/responsibility`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'remove', targetEmail })
-            });
-            if (response.ok) {
-                // Refresh list
-                const respData = await fetch(`/api/patients/${hn}/responsibility`).then(r => r.json());
-                setResponsiblePersons(respData.responsiblePersons || []);
-                setCanEditPatientData(respData.canEdit || false);
+        setConfirmConfig({
+            isOpen: true,
+            title: 'ยืนยันการลบความรับผิดชอบ',
+            description: 'คุณต้องการลบตัวเองออกจากความรับผิดชอบผู้ป่วยรายนี้หรือไม่?',
+            variant: 'warning',
+            confirmText: 'ยืนยัน',
+            action: async () => {
+                try {
+                    const response = await fetch(`/api/patients/${hn}/responsibility`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'remove', targetEmail })
+                    });
+                    if (response.ok) {
+                        toast.success('ลบผู้รับผิดชอบเรียบร้อย');
+                        // Refresh list
+                        const respData = await fetch(`/api/patients/${hn}/responsibility`).then(r => r.json());
+                        setResponsiblePersons(respData.responsiblePersons || []);
+                        setCanEditPatientData(respData.canEdit || false);
+                    } else {
+                        toast.error('ไม่สามารถลบผู้รับผิดชอบได้');
+                    }
+                } catch (error) {
+                    console.error('Failed to remove responsible person:', error);
+                    toast.error('เกิดข้อผิดพลาดในการลบผู้รับผิดชอบ');
+                } finally {
+                    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                }
             }
-        } catch (error) {
-            console.error('Failed to remove responsible person:', error);
-        }
+        });
     };
 
     const currentStepIndex = patientData ? STATUS_ORDER.indexOf(patientData.process) : 0;
     const [isSaving, setIsSaving] = useState(false);
+
+    // Pagination Limits
+    const [apptLimit, setApptLimit] = useState(5);
+    const [labLimit, setLabLimit] = useState(5);
 
     // Calculate days since last check
     const daysSinceLastCheck = (() => {
@@ -368,6 +420,7 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
             });
 
             if (res.ok) {
+                toast.success('ลบผู้ป่วยเรียบร้อยแล้ว');
                 router.push(backPath); // Return to list
                 router.refresh();
             } else {
@@ -378,8 +431,19 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
             toast.error('เกิดข้อผิดพลาดในการลบ');
         } finally {
             setIsDeleting(false);
-            setIsDeleteModalOpen(false);
+            setConfirmConfig(prev => ({ ...prev, isOpen: false }));
         }
+    };
+
+    const confirmDeletePatient = () => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'ยืนยันการลบผู้ป่วย',
+            description: `คุณแน่ใจหรือไม่ที่จะลบข้อมูลผู้ป่วย ${patientData?.name} ${patientData?.surname} (HN: ${patientData?.hn})? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+            variant: 'danger',
+            confirmText: 'ลบผู้ป่วย',
+            action: handleDeletePatient
+        });
     };
 
     const handleCancel = () => {
@@ -441,23 +505,25 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
 
         setIsUpdating(true);
         try {
-            const data: any = {
+            // Initialize data object with common properties
+            const data: { history: string; date?: string; time?: string; type?: string } = {
                 history: statusNote,
             };
 
             if (tempStatus === 'นัดหมาย') {
+                if (!appointmentDate) {
+                    toast.error('กรุณาระบุวันที่นัดหมาย');
+                    setIsUpdating(false);
+                    return;
+                }
                 data.date = appointmentDate;
                 data.time = appointmentTime;
+                data.type = appointmentType;
+            }
 
-                // Create Appointment History Record
-                await AppointmentService.createAppointment({
-                    patient_hn: hn,
-                    appointment_date: appointmentDate,
-                    appointment_time: appointmentTime,
-                    status: 'pending',
-                    note: statusNote,
-                    type: 'follow_up'
-                });
+            if (tempStatus === 'เจาะเลือด' && selectedAppointmentId) {
+                // Mark selected appointment as completed
+                await AppointmentService.updateStatus(selectedAppointmentId, 'completed');
 
                 // Refresh history
                 const history = await AppointmentService.getAppointmentsByHn(hn);
@@ -479,6 +545,11 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                     };
                 });
                 setShowStatusModal(false);
+
+                // Refresh history from server to show new appointment
+                const history = await AppointmentService.getAppointmentsByHn(hn);
+                setAppointmentHistory(history);
+
                 toast.success('อัปเดตสถานะเรียบร้อย');
             } else {
                 toast.error(result.error || 'ไม่สามารถอัปเดตสถานะได้');
@@ -552,6 +623,20 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
 
                 {/* Patient Info Card - Compact */}
                 <div className="bg-white dark:bg-[#1F2937] rounded-[20px] shadow-sm p-6 flex flex-col md:flex-row relative flex-shrink-0 min-h-[260px] transition-colors border border-transparent dark:border-gray-700">
+                    {/* Status Update Button - Absolute Positioned for Response */}
+                    <div className="absolute top-6 right-6 z-10">
+                        <button
+                            onClick={() => setShowStatusModal(true)}
+                            disabled={!canUpdateStatus}
+                            className={`w-8 h-8 rounded-[8px] flex items-center justify-center shadow-sm transition-transform active:scale-95 ${canUpdateStatus
+                                ? 'bg-[#818cf8] text-white hover:bg-[#6366F1]'
+                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                }`}
+                            title="อัปเดตสถานะ"
+                        >
+                            {STATUS_ICONS[patientData.process] || <ShoppingCart className="w-4 h-4" />}
+                        </button>
+                    </div>
 
                     {/* Left: Profile Section */}
                     <div className="w-full md:w-[280px] flex flex-col md:pr-6 shrink-0 mb-4 md:mb-0 relative">
@@ -595,7 +680,7 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
 
                             {Permissions.isAdmin(effectiveRole) && (
                                 <button
-                                    onClick={() => setIsDeleteModalOpen(true)}
+                                    onClick={confirmDeletePatient}
                                     className="w-fit px-3 py-1 rounded-[6px] border border-red-200 dark:border-red-800 text-[11px] transition-colors font-medium text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-1"
                                     title="ลบผู้ป่วย (Admin Only)"
                                 >
@@ -609,19 +694,7 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
 
                     {/* Right: Details Grid */}
                     <div className="flex-1 md:pl-6 pt-2 relative">
-                        <div className="absolute top-0 right-0">
-                            <button
-                                onClick={() => setShowStatusModal(true)}
-                                disabled={!canUpdateStatus}
-                                className={`w-8 h-8 rounded-[8px] flex items-center justify-center shadow-sm transition-transform active:scale-95 ${canUpdateStatus
-                                    ? 'bg-[#818cf8] text-white hover:bg-[#6366F1]'
-                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                    }`}
-                                title="อัปเดตสถานะ"
-                            >
-                                {STATUS_ICONS[patientData.process] || <ShoppingCart className="w-4 h-4" />}
-                            </button>
-                        </div>
+
 
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-8 mt-2">
 
@@ -629,14 +702,17 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                             <div className="flex flex-col gap-0.5">
                                 <label className="text-[12px] text-[#6B7280] dark:text-gray-400">เพศ</label>
                                 {isEditing && editData ? (
-                                    <select
-                                        value={editData.gender}
-                                        onChange={(e) => setEditData({ ...editData, gender: e.target.value })}
-                                        className="text-[14px] font-bold text-[#1e1b4b] dark:text-white border border-[#D1D5DB] dark:border-gray-600 rounded-md px-2 py-0.5 bg-white dark:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-[#818cf8]"
-                                    >
-                                        <option value="ชาย">ชาย</option>
-                                        <option value="หญิง">หญิง</option>
-                                    </select>
+                                    <div className="w-[100px]">
+                                        <CustomSelect
+                                            value={editData.gender}
+                                            onChange={(val) => setEditData({ ...editData, gender: val })}
+                                            options={[
+                                                { label: 'ชาย', value: 'ชาย' },
+                                                { label: 'หญิง', value: 'หญิง' }
+                                            ]}
+                                            className="min-w-[80px]"
+                                        />
+                                    </div>
                                 ) : (
                                     <span className="text-[14px] font-bold text-[#1e1b4b] dark:text-white">{patientData.gender}</span>
                                 )}
@@ -702,20 +778,23 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                             <div className="flex flex-col gap-0.5">
                                 <label className="text-[12px] text-[#6B7280] dark:text-gray-400">หมู่เลือด</label>
                                 {isEditing && editData ? (
-                                    <select
-                                        value={editData.bloodType}
-                                        onChange={(e) => setEditData({ ...editData, bloodType: e.target.value })}
-                                        className="text-[14px] font-bold text-[#1e1b4b] dark:text-white border border-[#D1D5DB] dark:border-gray-600 rounded-md px-2 py-0.5 bg-white dark:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-[#818cf8]"
-                                    >
-                                        <option value="A+">A+</option>
-                                        <option value="A-">A-</option>
-                                        <option value="B+">B+</option>
-                                        <option value="B-">B-</option>
-                                        <option value="AB+">AB+</option>
-                                        <option value="AB-">AB-</option>
-                                        <option value="O+">O+</option>
-                                        <option value="O-">O-</option>
-                                    </select>
+                                    <div className="w-[100px]">
+                                        <CustomSelect
+                                            value={editData.bloodType}
+                                            onChange={(val) => setEditData({ ...editData, bloodType: val })}
+                                            options={[
+                                                { label: 'A+', value: 'A+' },
+                                                { label: 'A-', value: 'A-' },
+                                                { label: 'B+', value: 'B+' },
+                                                { label: 'B-', value: 'B-' },
+                                                { label: 'AB+', value: 'AB+' },
+                                                { label: 'AB-', value: 'AB-' },
+                                                { label: 'O+', value: 'O+' },
+                                                { label: 'O-', value: 'O-' }
+                                            ]}
+                                            className="min-w-[80px]"
+                                        />
+                                    </div>
                                 ) : (
                                     <span className="text-[14px] font-bold text-[#1e1b4b] dark:text-white">{patientData.bloodType}</span>
                                 )}
@@ -846,42 +925,57 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                     <div className="flex-1 overflow-auto">
                         {/* Appointments Tab */}
                         {activeTab === 'appointments' && (
-                            <div className="bg-white dark:bg-[#1F2937] rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">
-                                        <tr>
-                                            <th className="px-4 py-3">วันที่</th>
-                                            <th className="px-4 py-3">เวลา</th>
-                                            <th className="px-4 py-3">ประเภท</th>
-                                            <th className="px-4 py-3">สถานะ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                        {appointmentHistory.length > 0 ? (
-                                            appointmentHistory.map((dummy, i) => (
-                                                <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                    <td className="px-4 py-3 text-gray-900 dark:text-white">{formatDateThai(dummy.appointment_date)}</td>
-                                                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{dummy.appointment_time}</td>
-                                                    <td className="px-4 py-3 text-gray-900 dark:text-white">{dummy.type}</td>
-                                                    <td className="px-4 py-3">
-                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${dummy.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
-                                                            dummy.status === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
-                                                                'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                                            }`}>
-                                                            {dummy.status}
-                                                        </span>
+                            <div className="bg-white dark:bg-[#1F2937] rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+                                <div className={`overflow-x-auto ${apptLimit > 5 ? 'max-h-[500px] overflow-y-auto custom-scrollbar' : ''}`}>
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 shadow-sm">
+                                            <tr>
+                                                <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800">วันที่</th>
+                                                <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800">เวลา</th>
+                                                <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800">ประเภท</th>
+                                                <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800">สถานะ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                            {appointmentHistory.length > 0 ? (
+                                                appointmentHistory.slice(0, apptLimit).map((dummy, i) => (
+                                                    <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                                        <td className="px-4 py-3 text-gray-900 dark:text-white">{formatDateThai(dummy.appointment_date)}</td>
+                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{dummy.appointment_time}</td>
+                                                        <td className="px-4 py-3 text-gray-900 dark:text-white">{dummy.type}</td>
+                                                        <td className="px-4 py-3">
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${dummy.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                                                                dummy.status === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                                                                    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                                                }`}>
+                                                                {dummy.status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                                        ไม่พบประวัติการนัดหมาย
                                                     </td>
                                                 </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={4} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                                                    ไม่พบประวัติการนัดหมาย
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {appointmentHistory.length > 5 && (
+                                    <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between shrink-0 z-20 relative">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            แสดง {Math.min(apptLimit, appointmentHistory.length)} จาก {appointmentHistory.length} รายการ
+                                        </span>
+                                        <button
+                                            onClick={() => setApptLimit(prev => prev > 5 ? 5 : appointmentHistory.length)}
+                                            className="text-xs font-medium text-[#6366F1] hover:text-[#4F46E5] dark:text-indigo-400 dark:hover:text-indigo-300"
+                                        >
+                                            {apptLimit > 5 ? 'ย่อรายการ' : 'ดูทั้งหมด'}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -915,43 +1009,58 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                                 )}
 
                                 {/* Lab Table */}
-                                <div className="bg-white dark:bg-[#1F2937] rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">
-                                            <tr>
-                                                <th className="px-4 py-3">วันที่</th>
-                                                <th className="px-4 py-3">Hb</th>
-                                                <th className="px-4 py-3">Hct</th>
-                                                <th className="px-4 py-3">WBC</th>
-                                                <th className="px-4 py-3">RBC</th>
-                                                <th className="px-4 py-3">PLT</th>
-                                                <th className="px-4 py-3">MCV</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                            {labHistory.length > 0 ? (
-                                                labHistory.map((lab, i) => (
-                                                    <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                        <td className="px-4 py-3 text-gray-900 dark:text-white whitespace-nowrap">
-                                                            {formatDateThai(lab.timestamp)}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.hb}</td>
-                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.hct}</td>
-                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.wbc}</td>
-                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.rbc}</td>
-                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.plt}</td>
-                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.mcv}</td>
-                                                    </tr>
-                                                ))
-                                            ) : (
+                                <div className="bg-white dark:bg-[#1F2937] rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+                                    <div className={`overflow-x-auto ${labLimit > 5 ? 'max-h-[500px] overflow-y-auto custom-scrollbar' : ''}`}>
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 shadow-sm">
                                                 <tr>
-                                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                                                        ไม่พบประวัติผลเลือด
-                                                    </td>
+                                                    <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800 whitespace-nowrap">วันที่</th>
+                                                    <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800 whitespace-nowrap">Hb</th>
+                                                    <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800 whitespace-nowrap">Hct</th>
+                                                    <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800 whitespace-nowrap">WBC</th>
+                                                    <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800 whitespace-nowrap">RBC</th>
+                                                    <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800 whitespace-nowrap">PLT</th>
+                                                    <th className="px-4 py-3 bg-gray-50 dark:bg-gray-800 whitespace-nowrap">MCV</th>
                                                 </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                                {labHistory.length > 0 ? (
+                                                    labHistory.slice(0, labLimit).map((lab, i) => (
+                                                        <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                                            <td className="px-4 py-3 text-gray-900 dark:text-white whitespace-nowrap">
+                                                                {formatDateThai(lab.timestamp)}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.hb}</td>
+                                                            <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.hct}</td>
+                                                            <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.wbc}</td>
+                                                            <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.rbc}</td>
+                                                            <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.plt}</td>
+                                                            <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lab.mcv}</td>
+                                                        </tr>
+                                                    ))
+                                                ) : (
+                                                    <tr>
+                                                        <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                                            ไม่พบประวัติผลเลือด
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {labHistory.length > 5 && (
+                                        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between shrink-0 z-20 relative">
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                แสดง {Math.min(labLimit, labHistory.length)} จาก {labHistory.length} รายการ
+                                            </span>
+                                            <button
+                                                onClick={() => setLabLimit(prev => prev > 5 ? 5 : labHistory.length)}
+                                                className="text-xs font-medium text-[#6366F1] hover:text-[#4F46E5] dark:text-indigo-400 dark:hover:text-indigo-300"
+                                            >
+                                                {labLimit > 5 ? 'ย่อรายการ' : 'ดูทั้งหมด'}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -1014,10 +1123,10 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
             {showStatusModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 backdrop-blur-sm" onClick={() => setShowStatusModal(false)}>
                     <div
-                        className="bg-white dark:bg-[#1F2937] rounded-xl w-[calc(100%-2rem)] max-w-[400px] mx-4 shadow-2xl dark:shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in-95 overflow-hidden border border-transparent dark:border-gray-700"
+                        className="bg-white dark:bg-[#1F2937] rounded-xl w-[calc(100%-2rem)] max-w-[400px] mx-4 shadow-2xl dark:shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in-95 border border-transparent dark:border-gray-700 flex flex-col"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="bg-white dark:bg-[#1F2937] px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                        <div className="bg-white dark:bg-[#1F2937] px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center rounded-t-xl">
                             <h2 className="text-lg font-bold text-[#1e1b4b] dark:text-white">อัปเดตสถานะ</h2>
                             <button onClick={() => setShowStatusModal(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
                                 <X className="w-5 h-5" />
@@ -1053,25 +1162,95 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                                         <Calendar className="w-4 h-4 text-[#6366F1] dark:text-indigo-400" />
                                         กำหนดวันเวลานัดหมาย
                                     </label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">วันที่</label>
-                                            <input
-                                                type="date"
-                                                value={appointmentDate}
-                                                onChange={(e) => setAppointmentDate(e.target.value)}
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6366F1] focus:border-transparent"
-                                            />
+                                    <div className="space-y-3">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">ประเภทนัดหมาย</label>
+                                                <CustomSelect
+                                                    value={appointmentType}
+                                                    onChange={setAppointmentType}
+                                                    options={[
+                                                        { value: 'Check-up', label: 'ตรวจสุขภาพ (Check-up)' },
+                                                        { value: 'Follow-up', label: 'ติดตามผล (Follow-up)' },
+                                                        { value: 'Consultation', label: 'ปรึกษาแพทย์' },
+                                                        { value: 'Other', label: 'อื่นๆ' }
+                                                    ]}
+                                                    placeholder="เลือกประเภท"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">วันที่</label>
+                                                <CustomDatePicker
+                                                    value={appointmentDate ? new Date(appointmentDate) : undefined}
+                                                    onChange={(d) => setAppointmentDate(d ? d.toISOString().split('T')[0] : '')}
+                                                    placeholder="เลือกวันที่"
+                                                />
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">เวลา</label>
-                                            <input
-                                                type="time"
+                                            <CustomTimePicker
                                                 value={appointmentTime}
-                                                onChange={(e) => setAppointmentTime(e.target.value)}
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6366F1] focus:border-transparent"
+                                                onChange={setAppointmentTime}
+                                                placeholder="เลือกเวลา"
                                             />
                                         </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {tempStatus === 'เจาะเลือด' && (
+                                <div className="bg-[#F8FAFC] dark:bg-gray-800 p-4 rounded-xl border border-[#E2E8F0] dark:border-gray-700 mb-4 animate-in slide-in-from-top-2">
+                                    <label className="flex items-center gap-2 text-[#0F172A] dark:text-white font-medium text-sm mb-3">
+                                        <Calendar className="w-4 h-4 text-[#6366F1] dark:text-indigo-400" />
+                                        ยืนยันการมาตามนัดหมาย
+                                    </label>
+                                    <div className="flex flex-col gap-2 max-h-[150px] overflow-y-auto">
+                                        {appointmentHistory
+                                            .filter(appt => appt.status === 'pending' || appt.status === undefined)
+                                            .length > 0 ? (
+                                            appointmentHistory
+                                                .filter(appt => appt.status === 'pending' || appt.status === undefined)
+                                                .map((appt, idx) => (
+                                                    <label key={idx} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedAppointmentId === appt.id
+                                                        ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700'
+                                                        : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-indigo-200'
+                                                        }`}>
+                                                        <input
+                                                            type="radio"
+                                                            name="selectedAppointment"
+                                                            checked={selectedAppointmentId === appt.id}
+                                                            onChange={() => setSelectedAppointmentId(appt.id || null)}
+                                                            className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="flex justify-between items-center mb-1">
+                                                                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                    {formatDateThai(appt.appointment_date)}
+                                                                </span>
+                                                                <span className="text-xs font-medium bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded">
+                                                                    {appt.appointment_time}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{appt.type}</p>
+                                                        </div>
+                                                    </label>
+                                                ))
+                                        ) : (
+                                            <div className="text-center text-gray-500 text-xs py-4">ไม่พบรายการนัดหมายที่รอดำเนินการ</div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                        <input
+                                            type="checkbox"
+                                            id="noAppt"
+                                            checked={selectedAppointmentId === null}
+                                            onChange={(e) => e.target.checked && setSelectedAppointmentId(null)}
+                                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <label htmlFor="noAppt" className="text-xs text-gray-500 dark:text-gray-400">
+                                            ไม่ใช่การมาตามนัด (Walk-in / นอกเวลานัด)
+                                        </label>
                                     </div>
                                 </div>
                             )}
@@ -1088,7 +1267,7 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                             </div>
                         </div>
 
-                        <div className="bg-gray-50 dark:bg-gray-800 px-6 py-4 flex justify-end gap-3">
+                        <div className="bg-gray-50 dark:bg-gray-800 px-6 py-4 flex justify-end gap-3 rounded-b-xl">
                             <button
                                 onClick={() => setShowStatusModal(false)}
                                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600"
@@ -1314,37 +1493,17 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                 </div>
             )}
             {/* Delete Patient Confirmation Modal */}
-            {isDeleteModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => !isDeleting && setIsDeleteModalOpen(false)}>
-                    <div className="bg-white dark:bg-[#1F2937] rounded-xl p-6 w-full max-w-sm shadow-xl border border-gray-200 dark:border-gray-700 text-center" onClick={e => e.stopPropagation()}>
-                        <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Trash2 className="w-6 h-6" />
-                        </div>
-                        <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">ยืนยันการลบผู้ป่วย?</h3>
-                        <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
-                            คุณแน่ใจหรือไม่ที่จะลบข้อมูลผู้ป่วย <b>{patientData?.name} {patientData?.surname} (HN: {patientData?.hn})</b>? <br />
-                            <span className="text-red-500 mt-1 block">การกระทำนี้ไม่สามารถย้อนกลับได้</span>
-                        </p>
-                        <div className="flex justify-center gap-3">
-                            <button
-                                onClick={() => setIsDeleteModalOpen(false)}
-                                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm"
-                                disabled={isDeleting}
-                            >
-                                ยกเลิก
-                            </button>
-                            <button
-                                onClick={handleDeletePatient}
-                                disabled={isDeleting}
-                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 text-sm"
-                            >
-                                {isDeleting && <Loader2 className="w-3 h-3 animate-spin" />}
-                                ลบผู้ป่วย
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmModal
+                isOpen={confirmConfig.isOpen}
+                onClose={() => !isDeleting && setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmConfig.action}
+                title={confirmConfig.title}
+                description={confirmConfig.description}
+                confirmText={confirmConfig.confirmText || "ยืนยัน"}
+                cancelText="ยกเลิก"
+                variant={confirmConfig.variant || "danger"}
+                isLoading={isDeleting}
+            />
         </>
     );
 };

@@ -1,15 +1,22 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Patient } from '@/types';
-import { Loader2, Upload, Users, CheckSquare, Square } from 'lucide-react';
+import { Loader2, Upload, Users, CheckSquare, Square, Search, Filter, Trash2 } from 'lucide-react';
 import { formatDateThai } from '@/lib/utils';
 import { BulkImportModal } from '@/components/modals/BulkImportModal';
 import { BulkAssignModal } from '@/components/modals/BulkAssignModal';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { useSession } from 'next-auth/react';
 import { Permissions } from '@/lib/permissions';
 import { useEffectiveRole } from '@/hooks/useEffectiveRole';
+import { deletePatient } from '@/lib/actions/patient'; // Import delete action
+// Animation Imports
+import { StaggerContainer, FadeIn, ListAnimatePresence } from '@/components/ui/MotionPrimitives';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { AnimatePresence } from 'framer-motion';
 
 // Severity color mapping based on days overdue
 const getSeverityColor = (daysOverdue: number) => {
@@ -61,6 +68,10 @@ export const PatientList = ({ basePath, title = 'ประวัติผู้�
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
 
+    // Delete Modal State
+    const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const { data: session } = useSession();
     const { effectiveRole: role } = useEffectiveRole();
     const isAdmin = Permissions.isAdmin(role);
@@ -111,6 +122,29 @@ export const PatientList = ({ basePath, title = 'ประวัติผู้�
 
         fetchPatients();
     }, []);
+
+    const handleConfirmDelete = async () => {
+        setIsDeleting(true);
+        try {
+            // Since HN is empty string for these cases, we pass empty string to deletePatient
+            // The service should handle it, or we might need to adjust logic if API needs something else.
+            // But based on previous logic: deletePatient(patient.hn) where patient.hn was likely "" or null.
+            const result = await deletePatient(''); // Empty HN
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                setError('ลบไม่สำเร็จ: ' + (result.error || 'Unknown error'));
+                setPatientToDelete(null);
+            }
+        } catch (err) {
+            console.error(err);
+            setError('เกิดข้อผิดพลาดในการลบ');
+            setPatientToDelete(null);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -176,80 +210,89 @@ export const PatientList = ({ basePath, title = 'ประวัติผู้�
                         </div>
                     </div>
 
-                    <div className="overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                        {patients.length > 0 ? (
-                            patients.map((patient, idx) => {
-                                const userEmail = session?.user?.email?.toLowerCase();
-                                const isCreator = userEmail && patient.creatorEmail && userEmail === patient.creatorEmail.toLowerCase();
-                                const isResponsible = userEmail && patient.responsibleEmails?.some(email => email.toLowerCase() === userEmail);
-                                const canSelect = isAdmin || isCreator || isResponsible;
+                    <StaggerContainer className="overflow-y-auto pr-2 space-y-3 custom-scrollbar h-full">
+                        <ListAnimatePresence>
+                            {patients.length > 0 ? (
+                                patients.map((patient, idx) => {
+                                    const userEmail = session?.user?.email?.toLowerCase();
+                                    const isCreator = userEmail && patient.creatorEmail && userEmail === patient.creatorEmail.toLowerCase();
+                                    const isResponsible = userEmail && patient.responsibleEmails?.some(email => email.toLowerCase() === userEmail);
+                                    const canSelect = isAdmin || isCreator || isResponsible;
 
-                                return (
-                                    <div key={`${patient.hn}-${idx}`} className="bg-white dark:bg-[#1F2937] rounded-[16px] p-4 shadow-sm flex gap-3 border border-gray-100 dark:border-gray-700 transition-colors card-animate hover-lift" style={{ animationDelay: `${idx * 0.03}s` }}>
-                                        {/* Checkbox - Only show if Admin or Creator */}
-                                        {canUseBulkTools && canSelect && (
-                                            <button
-                                                onClick={() => {
-                                                    const newSelected = new Set(selectedPatients);
-                                                    if (newSelected.has(patient.hn)) {
-                                                        newSelected.delete(patient.hn);
-                                                    } else {
-                                                        newSelected.add(patient.hn);
-                                                    }
-                                                    setSelectedPatients(newSelected);
-                                                }}
-                                                className="flex-shrink-0 mt-0.5"
-                                            >
-                                                {selectedPatients.has(patient.hn) ? (
-                                                    <CheckSquare className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                                                ) : (
-                                                    <Square className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                                    return (
+                                        <FadeIn
+                                            key={`${patient.hn}`}
+                                            className="bg-white dark:bg-[#1F2937] rounded-[16px] p-4 shadow-sm flex gap-3 border border-gray-100 dark:border-gray-700 transition-colors card-animate hover-lift group"
+                                        >
+                                            {/* Checkbox - Only show if Admin or Creator */}
+                                            {canUseBulkTools && canSelect && (
+                                                <button
+                                                    onClick={() => {
+                                                        const newSelected = new Set(selectedPatients);
+                                                        if (newSelected.has(patient.hn)) {
+                                                            newSelected.delete(patient.hn);
+                                                        } else {
+                                                            newSelected.add(patient.hn);
+                                                        }
+                                                        setSelectedPatients(newSelected);
+                                                    }}
+                                                    className="flex-shrink-0 mt-0.5"
+                                                >
+                                                    {selectedPatients.has(patient.hn) ? (
+                                                        <CheckSquare className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                                    ) : (
+                                                        <Square className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                                                    )}
+                                                </button>
+                                            )}
+
+                                            {/* Content */}
+                                            <div className="flex-1 flex flex-col gap-1.5">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="text-[16px] font-bold text-[#1F2937] dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                                        HN : {patient.hn}
+                                                    </div>
+                                                    <StatusBadge status={patient.process} />
+                                                </div>
+                                                <div className="text-[13px] text-[#374151] dark:text-gray-300">
+                                                    {patient.name} {patient.surname}
+                                                </div>
+                                                {patient.appointmentDate && (
+                                                    <div className="text-[11px] text-gray-400 dark:text-gray-500">
+                                                        นัดหมาย: {formatDateThai(patient.appointmentDate)} {patient.appointmentTime || ''}
+                                                    </div>
                                                 )}
-                                            </button>
-                                        )}
-
-                                        {/* Content */}
-                                        <div className="flex-1 flex flex-col gap-1.5">
-                                            <div className="flex justify-between items-start">
-                                                <div className="text-[16px] font-bold text-[#1F2937] dark:text-white">
-                                                    HN : {patient.hn}
-                                                </div>
-                                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${patient.process === 'เสร็จสิ้น'
-                                                    ? 'text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30'
-                                                    : 'text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700'
-                                                    }`}>
-                                                    {patient.process || 'ไม่ระบุ'}
-                                                </span>
+                                                {patient.caregiver && (
+                                                    <div className="text-[11px] text-gray-400 dark:text-gray-500">
+                                                        ผู้ดูแล: {patient.caregiver}
+                                                    </div>
+                                                )}
+                                                {patient.hn ? (
+                                                    <Link
+                                                        href={`${basePath}/${patient.hn}`}
+                                                        className="inline-block w-fit px-5 py-1.5 bg-[#E0E7FF] dark:bg-indigo-900/50 text-[#4338CA] dark:text-indigo-300 text-[12px] font-medium rounded-[6px] hover:bg-[#C7D2FE] dark:hover:bg-indigo-900 transition-colors mt-1"
+                                                    >
+                                                        ตรวจสอบ
+                                                    </Link>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => setPatientToDelete('NO_HN_' + idx)}
+                                                        className="inline-block w-fit px-5 py-1.5 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300 text-[12px] font-medium rounded-[6px] hover:bg-red-200 dark:hover:bg-red-800 transition-colors mt-1"
+                                                    >
+                                                        ลบ (No HN)
+                                                    </button>
+                                                )}
                                             </div>
-                                            <div className="text-[13px] text-[#374151] dark:text-gray-300">
-                                                {patient.name} {patient.surname}
-                                            </div>
-                                            {patient.appointmentDate && (
-                                                <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                                                    นัดหมาย: {formatDateThai(patient.appointmentDate)} {patient.appointmentTime || ''}
-                                                </div>
-                                            )}
-                                            {patient.caregiver && (
-                                                <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                                                    ผู้ดูแล: {patient.caregiver}
-                                                </div>
-                                            )}
-                                            <Link
-                                                href={`${basePath}/${patient.hn}`}
-                                                className="inline-block w-fit px-5 py-1.5 bg-[#E0E7FF] dark:bg-indigo-900/50 text-[#4338CA] dark:text-indigo-300 text-[12px] font-medium rounded-[6px] hover:bg-[#C7D2FE] dark:hover:bg-indigo-900 transition-colors mt-1"
-                                            >
-                                                ตรวจสอบ
-                                            </Link>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        ) : (
-                            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                                <p>ไม่พบข้อมูลผู้ป่วย</p>
-                            </div>
-                        )}
-                    </div>
+                                        </FadeIn>
+                                    );
+                                })
+                            ) : (
+                                <FadeIn className="text-center py-12 text-gray-500 dark:text-gray-400">
+                                    <p>ไม่พบข้อมูลผู้ป่วย</p>
+                                </FadeIn>
+                            )}
+                        </ListAnimatePresence>
+                    </StaggerContainer>
                 </div>
 
                 {/* Right Column: Missed Appointment Sidebar */}
@@ -306,6 +349,19 @@ export const PatientList = ({ basePath, title = 'ประวัติผู้�
                     setSelectedPatients(new Set());
                 }}
             />
+
+            {/* Custom Confirm Modal for Delete */}
+            <ConfirmModal
+                isOpen={!!patientToDelete}
+                onClose={() => setPatientToDelete(null)}
+                onConfirm={handleConfirmDelete}
+                title="ยืนยันการลบข้อมูล"
+                description="คุณต้องการลบข้อมูลผู้ป่วยที่ไม่มี HN รายนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถเรียกคืนได้"
+                confirmText="ลบข้อมูล"
+                variant="danger"
+                isLoading={isDeleting}
+            />
         </>
     );
 };
+

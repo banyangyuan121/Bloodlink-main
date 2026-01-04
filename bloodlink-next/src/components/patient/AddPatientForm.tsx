@@ -3,28 +3,46 @@
 import { useState } from 'react';
 import { addPatient } from '@/lib/actions/patient';
 import { useRouter } from 'next/navigation';
-import { Loader2, Save, User, Activity, ShieldX, UsersRound, X, UserPlus } from 'lucide-react';
+import { Loader2, Save, User, Activity, ShieldX, UsersRound, X, UserPlus, AlertCircle } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { Permissions } from '@/lib/permissions';
 import { useEffectiveRole } from '@/hooks/useEffectiveRole';
+import { CustomSelect } from '@/components/ui/CustomSelect';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { patientSchema, type PatientFormData } from '@/lib/validations/patient';
 
 export function AddPatientForm() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [submitError, setSubmitError] = useState('');
 
-    // Responsible persons state - store user objects with name and email
+    // Responsible persons state (kept separate from main form for now)
     const [additionalResponsible, setAdditionalResponsible] = useState<{ email: string; name: string; surname?: string }[]>([]);
     const [newEmail, setNewEmail] = useState('');
     const [searchingEmail, setSearchingEmail] = useState(false);
     const [emailError, setEmailError] = useState('');
 
-    // Check if user has permission to add patients
+    // Check permissions
     const { data: session } = useSession();
     const { effectiveRole } = useEffectiveRole();
     const canAdd = Permissions.canAddPatient(effectiveRole);
     const currentUserEmail = session?.user?.email || '';
     const currentUserName = session?.user?.name || 'คุณ';
+
+    // React Hook Form Setup
+    const {
+        register,
+        handleSubmit,
+        control,
+        formState: { errors },
+    } = useForm<PatientFormData>({
+        resolver: zodResolver(patientSchema),
+        defaultValues: {
+            gender: 'Male',
+            bloodType: 'O',
+        }
+    });
 
     const handleAddResponsible = async () => {
         const email = newEmail.trim().toLowerCase();
@@ -40,7 +58,6 @@ export function AddPatientForm() {
             return;
         }
 
-        // Validate email exists in system
         setSearchingEmail(true);
         try {
             const res = await fetch(`/api/users/search?email=${encodeURIComponent(email)}`);
@@ -66,42 +83,33 @@ export function AddPatientForm() {
         setAdditionalResponsible(additionalResponsible.filter(e => e.email !== email));
     };
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
+    const onSubmit = async (data: PatientFormData) => {
         setIsLoading(true);
-        setError('');
-
-        const formData = new FormData(e.currentTarget);
-        const data = {
-            hn: formData.get('hn') as string,
-            name: formData.get('name') as string,
-            surname: formData.get('surname') as string,
-            gender: formData.get('gender') as string,
-            age: formData.get('age') as string,
-            bloodType: formData.get('bloodType') as string,
-            disease: formData.get('disease') as string,
-            medication: formData.get('medication') as string,
-            allergies: formData.get('allergies') as string,
-        };
+        setSubmitError('');
 
         try {
-            // Extract just emails from user objects for the action
+            // Transform form data to match API expectation (string conversions)
+            const payload = {
+                ...data,
+                age: data.age.toString(),
+            };
+
             const additionalEmails = additionalResponsible.map(r => r.email);
-            const res = await addPatient(data, additionalEmails);
+            const res = await addPatient(payload, additionalEmails);
+
             if (res.success) {
                 router.push('/dashboard');
                 router.refresh();
             } else {
-                setError(res.error || 'Failed to add patient');
+                setSubmitError(res.error || 'Failed to add patient');
             }
         } catch {
-            setError('An unexpected error occurred');
+            setSubmitError('An unexpected error occurred');
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Show access denied if user cannot add patients
     if (!canAdd) {
         return (
             <div className="flex flex-col items-center justify-center py-16 text-center font-[family-name:var(--font-kanit)]">
@@ -123,11 +131,12 @@ export function AddPatientForm() {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-8 font-[family-name:var(--font-kanit)]">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 font-[family-name:var(--font-kanit)]">
 
-            {error && (
-                <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl text-sm font-medium">
-                    {error}
+            {submitError && (
+                <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl text-sm font-medium flex items-center">
+                    <AlertCircle className="w-5 h-5 mr-2" />
+                    {submitError}
                 </div>
             )}
 
@@ -140,44 +149,84 @@ export function AddPatientForm() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">HN (Hospital Number) *</label>
-                        <input name="hn" required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400 dark:placeholder-gray-500" placeholder="e.g. 6601234" />
+                        <input
+                            {...register('hn')}
+                            className={`w-full px-4 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all outline-none focus:ring-2 ${errors.hn ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'}`}
+                            placeholder="e.g. 6601234"
+                        />
+                        {errors.hn && <p className="text-red-500 text-xs mt-1">{errors.hn.message}</p>}
                     </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name *</label>
-                            <input name="name" required className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" />
+                            <input
+                                {...register('name')}
+                                className={`w-full px-4 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all outline-none focus:ring-2 ${errors.name ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'}`}
+                            />
+                            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name</label>
-                            <input name="surname" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" />
+                            <input
+                                {...register('surname')}
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                            />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Age</label>
-                            <input name="age" type="number" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" />
+                            <input
+                                type="number"
+                                {...register('age')}
+                                className={`w-full px-4 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-all outline-none focus:ring-2 ${errors.age ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'}`}
+                            />
+                            {errors.age && <p className="text-red-500 text-xs mt-1">{errors.age.message}</p>}
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Gender</label>
-                            <select name="gender" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all">
-                                <option value="">Select...</option>
-                                <option value="Male">Male</option>
-                                <option value="Female">Female</option>
-                                <option value="Other">Other</option>
-                            </select>
+                            <Controller
+                                name="gender"
+                                control={control}
+                                render={({ field }) => (
+                                    <CustomSelect
+                                        label="Gender"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        error={errors.gender?.message}
+                                        options={[
+                                            { value: 'Male', label: 'Male' },
+                                            { value: 'Female', label: 'Female' },
+                                            { value: 'Other', label: 'Other' }
+                                        ]}
+                                        triggerClassName="rounded-xl px-4 py-2 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 h-auto"
+                                    />
+                                )}
+                            />
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Blood Type</label>
-                        <select name="bloodType" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all">
-                            <option value="">Select...</option>
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="O">O</option>
-                            <option value="AB">AB</option>
-                        </select>
+                        <Controller
+                            name="bloodType"
+                            control={control}
+                            render={({ field }) => (
+                                <CustomSelect
+                                    label="Blood Type"
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    error={errors.bloodType?.message}
+                                    options={[
+                                        { value: 'A', label: 'A' },
+                                        { value: 'B', label: 'B' },
+                                        { value: 'O', label: 'O' },
+                                        { value: 'AB', label: 'AB' }
+                                    ]}
+                                    triggerClassName="rounded-xl px-4 py-2 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 h-auto"
+                                />
+                            )}
+                        />
                     </div>
                 </div>
             </div>
@@ -208,7 +257,7 @@ export function AddPatientForm() {
                                 <div key={person.email} className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg text-sm">
                                     <User className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
                                     <span className="text-gray-700 dark:text-gray-300 font-medium">{person.name} {person.surname}</span>
-                                    <span className="text-gray-500 dark:text-gray-400 text-xs">({person.email})</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 text-xs">({person.email})</span>
                                     <button
                                         type="button"
                                         onClick={() => handleRemoveResponsible(person.email)}
@@ -246,9 +295,6 @@ export function AddPatientForm() {
                 {emailError && (
                     <p className="text-xs text-red-500 dark:text-red-400 mt-1">{emailError}</p>
                 )}
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                    ผู้รับผิดชอบจะสามารถแก้ไขข้อมูลผู้ป่วยรายนี้ได้ (ต้องเป็นอีเมลที่มีในระบบ)
-                </p>
             </div>
 
             {/* Section 3: Medical Info */}
@@ -260,15 +306,27 @@ export function AddPatientForm() {
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Underlying Diseases</label>
-                        <input name="disease" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400 dark:placeholder-gray-500" placeholder="Separate with comma (e.g. Hypertension, Diabetes)" />
+                        <input
+                            {...register('disease')}
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400 dark:placeholder-gray-500"
+                            placeholder="Separate with comma (e.g. Hypertension, Diabetes)"
+                        />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Allergies</label>
-                        <input name="allergies" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400 dark:placeholder-gray-500" placeholder="e.g. Penicillin, Seafood" />
+                        <input
+                            {...register('allergies')}
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400 dark:placeholder-gray-500"
+                            placeholder="e.g. Penicillin, Seafood"
+                        />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Medication</label>
-                        <textarea name="medication" rows={2} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" />
+                        <textarea
+                            {...register('medication')}
+                            rows={2}
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                        />
                     </div>
                 </div>
             </div>

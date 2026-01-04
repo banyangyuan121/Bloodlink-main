@@ -9,6 +9,7 @@ import { Patient } from '@/types';
 import { useSession } from 'next-auth/react';
 import { Permissions } from '@/lib/permissions';
 import { useEffectiveRole } from '@/hooks/useEffectiveRole';
+import { CountUp } from '@/components/ui/CountUp';
 
 interface DashboardStats {
     totalPatients: number;
@@ -115,7 +116,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                     <div className="text-[22px] font-bold text-gray-800 dark:text-white">
-                                        {isLoading ? '-' : stats.totalPatients}
+                                        {isLoading ? '-' : <CountUp value={stats.totalPatients} />}
                                     </div>
                                     <div className="text-[11px] text-gray-500 dark:text-gray-400">ผู้ป่วยทั้งหมด</div>
                                 </div>
@@ -128,7 +129,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                     <div className="text-[22px] font-bold text-gray-800 dark:text-white">
-                                        {isLoading ? '-' : stats.appointments}
+                                        {isLoading ? '-' : <CountUp value={stats.appointments} />}
                                     </div>
                                     <div className="text-[11px] text-gray-500 dark:text-gray-400">นัดหมาย</div>
                                 </div>
@@ -141,7 +142,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                     <div className="text-[22px] font-bold text-gray-800 dark:text-white">
-                                        {isLoading ? '-' : stats.inProgress}
+                                        {isLoading ? '-' : <CountUp value={stats.inProgress} />}
                                     </div>
                                     <div className="text-[11px] text-gray-500 dark:text-gray-400">กำลังดำเนินการ</div>
                                 </div>
@@ -154,7 +155,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div>
                                     <div className="text-[22px] font-bold text-gray-800 dark:text-white">
-                                        {isLoading ? '-' : stats.completed}
+                                        {isLoading ? '-' : <CountUp value={stats.completed} />}
                                     </div>
                                     <div className="text-[11px] text-gray-500 dark:text-gray-400">เสร็จสิ้น</div>
                                 </div>

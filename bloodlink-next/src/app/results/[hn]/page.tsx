@@ -11,6 +11,28 @@ import Link from 'next/link';
 import { Edit2, Save, X } from 'lucide-react';
 import { formatDateTimeThai } from '@/lib/utils';
 import { toast } from 'sonner';
+import { LabAlert } from '@/components/ui/LabAlert';
+
+// Helper to check if value is outside range
+const checkAbnormal = (val: string | undefined | null, range: string): boolean => {
+    if (!val || val === '-' || !range) return false;
+
+    // Clean value (remove commas, etc if any, though usually numeric string)
+    // Handle cases like "< 0.5"? existing data seems to be numbers. Use parseFloat.
+    const numVal = parseFloat(val);
+    if (isNaN(numVal)) return false;
+
+    // Parse range "min-max"
+    const parts = range.split('-');
+    if (parts.length !== 2) return false;
+
+    const min = parseFloat(parts[0]);
+    const max = parseFloat(parts[1]);
+
+    if (isNaN(min) || isNaN(max)) return false;
+
+    return numVal < min || numVal > max;
+};
 
 interface LabResult {
     timestamp: string;
@@ -135,7 +157,8 @@ function BloodTestResultsContent() {
                 setIsEditing(false);
                 toast.success('บันทึกผลตรวจเรียบร้อยแล้ว');
             } else {
-                toast.error('เกิดข้อผิดพลาดในการบันทึก');
+                const data = await response.json();
+                toast.error(data.error || 'เกิดข้อผิดพลาดในการบันทึก');
             }
         } catch (err) {
             console.error('Save error:', err);
@@ -177,7 +200,7 @@ function BloodTestResultsContent() {
                             className="w-full px-2 py-1 text-[13px] border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
                     ) : (
-                        value
+                        <LabAlert isAbnormal={checkAbnormal(String(value), test.range)} val={String(value)} />
                     )}
                 </td>
                 <td className="py-2 px-4 text-[13px] text-gray-500 dark:text-gray-400">{test.unit}</td>

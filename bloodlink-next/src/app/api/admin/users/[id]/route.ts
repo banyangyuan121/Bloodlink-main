@@ -78,9 +78,17 @@ export async function PATCH(
 
         const { id } = await params;
         const body = await request.json();
-        const { role, position, bio } = body;
+        const { role, position, bio, status } = body;
 
-        const success = await AuthService.updateUserRole(id, role, position, bio);
+        let success = false;
+
+        // If status update requested
+        if (status) {
+            success = await AuthService.updateUserStatus(id, status);
+        } else {
+            // Normal role/bio update
+            success = await AuthService.updateUserRole(id, role, position, bio);
+        }
 
         if (success) {
             return NextResponse.json({ success: true });
