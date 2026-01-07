@@ -86,11 +86,11 @@ export function PatientForm({ initialData = {}, onCancel, onConfirm, title = "�
     return (
         <div className="w-full flex justify-center items-start font-[family-name:var(--font-kanit)]">
             <div className="w-full bg-white dark:bg-[#1F2937] rounded-[24px] shadow-[0_20px_40px_rgba(15,23,42,0.04)] dark:shadow-none p-[32px_40px_28px_40px] flex flex-col gap-6 relative transition-colors">
-                <h1 className="text-[28px] font-bold text-[#111827] dark:text-white mb-2">{title}</h1>
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-2">
+                    <h1 className="text-[28px] font-bold text-[#111827] dark:text-white">{title}</h1>
 
-                <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                     {/* Exam Type */}
-                    <div className="flex flex-col gap-1.5 absolute top-8 right-10 w-[250px] z-20">
+                    <div className="flex flex-col gap-1.5 w-full md:w-[250px] z-20">
                         <label className="text-[13px] font-semibold text-[#374151] dark:text-gray-300">
                             ประเภทการตรวจ <span className="text-red-500">*</span>
                         </label>
@@ -105,6 +105,9 @@ export function PatientForm({ initialData = {}, onCancel, onConfirm, title = "�
                             error={errors.testType}
                         />
                     </div>
+                </div>
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-6">
 
                     {/* Section: Name */}
                     <div className="space-y-4 pt-4">

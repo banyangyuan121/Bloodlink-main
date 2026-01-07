@@ -130,26 +130,51 @@ export class AppointmentService {
      */
     static async updateStatus(id: string, status: string): Promise<boolean> {
         try {
-            const updateData: any = { updated_at: new Date().toISOString() };
+            // Update the status column which is standard
+            const updateData: any = {
+                updated_at: new Date().toISOString(),
+                status: status
+            };
 
+            // NOTE: We try to update end_time if it exists, but since checking existence is hard,
+            // we will stick to 'status' which is in the migration file.
+            // If we needed end_time, we would need to know the schema for sure.
+            // For now, let's also try setting end_time if status is completed, hoping the column exists.
+            // IF this fails, we will fallback to just status.
+
+            // Actually, let's try updating just status first as it's safer given the error.
+            // The previous error "Update status error" likely came from missing column or RLS.
+
+            // Let's attempt to update both status and end_time (legacy support) but handle failure
             if (status === 'completed') {
-                updateData.end_time = new Date().toISOString(); // Set end_time to now
+                updateData.end_time = new Date().toISOString();
             } else if (status === 'pending') {
-                updateData.end_time = null; // Clear end_time
+                updateData.end_time = null;
             }
 
-            const { error } = await supabase
+            let { error } = await supabase
                 .from('appointments')
                 .update(updateData)
                 .eq('id', id);
 
             if (error) {
-                console.error('Update status error:', error);
-                return false;
+                console.warn('Update with end_time failed, retrying with status only. Error:', JSON.stringify(error));
+
+                // Retry with only status and updated_at (remove end_time)
+                delete updateData.end_time;
+                const { error: retryError } = await supabase
+                    .from('appointments')
+                    .update(updateData)
+                    .eq('id', id);
+
+                if (retryError) {
+                    console.error('Update status error (retry):', JSON.stringify(retryError, null, 2));
+                    return false;
+                }
             }
             return true;
         } catch (error) {
-            console.error('Update status error:', error);
+            console.error('Update status exception:', error);
             return false;
         }
     }

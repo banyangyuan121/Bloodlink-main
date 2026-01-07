@@ -249,7 +249,14 @@ export const Permissions = {
     getNextAllowedStatus: (role?: string, currentStatus?: string): string | null => {
         if (!role || !currentStatus) return null;
 
-        // Admin can always go to next
+        // Check Recheck transition (Finished -> Waiting)
+        if (currentStatus === 'เสร็จสิ้น') {
+            if (Permissions.canUpdateToStatus(role, 'เสร็จสิ้น', 'รอตรวจ')) {
+                return 'รอตรวจ';
+            }
+            return null;
+        }
+
         const currentIndex = STATUS_ORDER.indexOf(currentStatus as PatientStatus);
         if (currentIndex === -1 || currentIndex >= STATUS_ORDER.length - 1) return null;
 

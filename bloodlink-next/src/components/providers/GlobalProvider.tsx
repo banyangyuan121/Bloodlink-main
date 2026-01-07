@@ -1,5 +1,6 @@
 'use client';
 
+import { OfflineBanner } from '@/components/shared/OfflineBanner';
 import { HelpButton } from '@/components/shared/HelpButton';
 import { NotificationPopup } from '@/components/shared/NotificationPopup';
 import { useRouter } from 'next/navigation';
@@ -20,6 +21,7 @@ function GlobalProviderInner({ children }: GlobalProviderProps) {
     const handleAction = () => {
         if (currentNotification.targetPath) {
             router.push(currentNotification.targetPath);
+            closePopup(); // Close popup after navigation
         }
     };
 
@@ -28,6 +30,7 @@ function GlobalProviderInner({ children }: GlobalProviderProps) {
             <RoleGuard>
                 {children}
             </RoleGuard>
+            <OfflineBanner />
             <HelpButton onNotify={notify} />
             <NotificationPopup
                 isOpen={currentNotification.isOpen}

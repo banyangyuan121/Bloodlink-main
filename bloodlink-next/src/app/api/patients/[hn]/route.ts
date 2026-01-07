@@ -1,15 +1,29 @@
+
 import { NextResponse } from 'next/server';
 import { PatientService } from '@/lib/services/patientService';
+import { supabaseAdmin } from '@/lib/supabase';
+import { auth } from '@/auth';
 
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ hn: string }> }
 ) {
     try {
+        const session = await auth();
+        if (!session || !session.user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { hn } = await params;
-        const patient = await PatientService.getPatientByHn(hn);
+        const decodedHn = decodeURIComponent(hn); // Ensure HN is decoded
+        console.log(`[API] Fetching patient HN: ${decodedHn} (Raw: ${hn})`);
+
+        // Use Admin client to bypass RLS policies that might block the API (Anon)
+        // while relying on the session check above for security.
+        const patient = await PatientService.getPatientByHn(decodedHn, supabaseAdmin || undefined);
 
         if (!patient) {
+            console.warn(`[API] Patient not found for HN: ${decodedHn} `);
             return NextResponse.json(
                 { error: 'Patient not found' },
                 { status: 404 }
@@ -99,14 +113,14 @@ export async function DELETE(
 ) {
     try {
         const { hn } = await params;
-        console.log(`[API DELETE] Attempting to delete patient HN: ${hn}`);
+        console.log(`[API DELETE] Attempting to delete patient HN: ${hn} `);
         const success = await PatientService.deletePatient(hn);
-        console.log(`[API DELETE] Result for HN ${hn}: ${success ? 'Success' : 'Failed'}`);
+        console.log(`[API DELETE] Result for HN ${hn}: ${success ? 'Success' : 'Failed'} `);
 
         if (success) {
             return NextResponse.json({ success: true });
         } else {
-            console.warn(`[API DELETE] Failed to delete patient HN: ${hn}`);
+            console.warn(`[API DELETE] Failed to delete patient HN: ${hn} `);
             return NextResponse.json(
                 { error: 'Failed to delete patient' },
                 { status: 400 }

@@ -138,6 +138,14 @@ export function AdminSidebar() {
                                 )}
                             </Link>
                         ))}
+                        {/* Back to App Link */}
+                        <Link
+                            href="/dashboard"
+                            className="flex sm:hidden items-center gap-2 px-4 py-3 rounded-[14px] text-[12px] font-medium text-[#3E3066] dark:text-gray-300 hover:bg-[#e1eafa] dark:hover:bg-[#374151] hover:text-[#1E40AF] dark:hover:text-white transition-all duration-200 mr-4 border-t border-gray-100 dark:border-gray-700 mt-2 pt-4"
+                        >
+                            <LayoutGrid className="w-[18px] h-[18px] flex-shrink-0" />
+                            <span className="flex-1">กลับหน้าหลัก</span>
+                        </Link>
                     </nav>
 
                     {/* Logout Button */}

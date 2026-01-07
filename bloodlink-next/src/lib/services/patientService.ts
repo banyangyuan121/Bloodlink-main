@@ -79,7 +79,7 @@ export class PatientService {
                     testType: p.test_type || '',
                     status: p.status || 'ใช้งาน',
                     process: p.process || 'รอตรวจ',
-                    appointmentDate: p.appointment_date || p.created_at,
+                    appointmentDate: p.appointment_date,
                     timestamp: p.updated_at,
                     caregiver: caregiverName,
                     creatorEmail: creator?.user_email,
@@ -93,15 +93,25 @@ export class PatientService {
         }
     }
 
-    static async getPatientByHn(hn: string): Promise<Patient | null> {
+
+    static async getPatientByHn(hn: string, client = supabase): Promise<Patient | null> {
         try {
-            const { data: patient, error } = await supabase
+            const { data: patient, error } = await client
                 .from('patients')
                 .select('*')
                 .eq('hn', hn)
                 .single();
 
-            if (error || !patient) return null;
+            if (error) {
+                console.error(`Error getting patient by HN (${hn}):`, error);
+
+                // If using single(), it returns error if no rows found
+                if (error.code === 'PGRST116') {
+                    return null;
+                }
+            }
+
+            if (!patient) return null;
 
             return {
                 hn: patient.hn,
@@ -117,7 +127,7 @@ export class PatientService {
                 testType: patient.test_type || '',
                 status: patient.status || 'ใช้งาน',
                 process: patient.process || 'รอตรวจ',
-                appointmentDate: patient.appointment_date || patient.created_at,
+                appointmentDate: patient.appointment_date,
                 timestamp: patient.updated_at,
                 caregiver: patient.caregiver || '',
                 appointmentTime: patient.appointment_date ? new Date(patient.appointment_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '',
@@ -245,17 +255,18 @@ export class PatientService {
 
             // Send notification for new patient (status: รอตรวจ)
             const patientName = `${data.name} ${data.surname || ''}`.trim();
-            fetch('/api/notifications/status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    patientHn: data.hn || '',
-                    status: 'รอตรวจ',
+            try {
+                const { NotificationService } = await import('./notificationService');
+                await NotificationService.sendStatusNotification(
+                    data.hn || '',
+                    'รอตรวจ',
                     patientName,
-                    customSubject: 'เพิ่มผู้ป่วยใหม่',
-                    customMessage: '📋 เพิ่มผู้ป่วยใหม่ในระบบ'
-                })
-            }).catch(err => console.error('Notification error:', err));
+                    'เพิ่มผู้ป่วยใหม่',
+                    '📋 เพิ่มผู้ป่วยใหม่ในระบบ'
+                );
+            } catch (err) {
+                console.error('Notification error:', err);
+            }
 
             return { success: true };
         } catch (error) {
@@ -343,16 +354,19 @@ export class PatientService {
             if (currentPatient) {
                 const patientName = `${currentPatient.name} ${currentPatient.surname || ''}`.trim();
                 // Fire and forget - call API endpoint which runs server-side
-                fetch('/api/notifications/status', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        patientHn: hn,
-                        status: processStatus,
+                // Use NotificationService directly
+                try {
+                    const { NotificationService } = await import('./notificationService');
+                    await NotificationService.sendStatusNotification(
+                        hn,
+                        processStatus,
                         patientName,
-                        changedBy: data.changedByName || data.changedByEmail
-                    })
-                }).catch(err => console.error('Notification error:', err));
+                        undefined, // Default subject
+                        undefined  // Default message
+                    );
+                } catch (err) {
+                    console.error('Notification error:', err);
+                }
             }
 
             return true;
@@ -668,8 +682,8 @@ export class PatientService {
                 latestReceipt: p.latest_receipt || '-',
                 testType: p.test_type || '',
                 status: p.status || 'ใช้งาน',
-                process: p.process || 'นัดหมาย',
-                appointmentDate: p.appointment_date || p.created_at,
+                process: p.process || 'รอตรวจ',
+                appointmentDate: p.appointment_date,
                 timestamp: p.updated_at,
                 caregiver: p.caregiver || '',
                 appointmentTime: '',

@@ -5,9 +5,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import clsx from 'clsx';
-import { LayoutGrid, FileText, Calendar, LogOut, Plus, Menu, X, Home } from 'lucide-react';
+import { LayoutGrid, FileText, Calendar, LogOut, Plus, Menu, X, Home, Settings } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
+import { Permissions } from '@/lib/permissions';
+import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 
 interface NotificationCounts {
     resultsReady: number;
@@ -27,6 +29,7 @@ export function Sidebar() {
     const pathname = usePathname();
     const { resolvedTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
+    const { effectiveRole } = useEffectiveRole();
 
     useEffect(() => {
         setMounted(true);
@@ -231,10 +234,12 @@ export function Sidebar() {
                         </div>
                     </div>
 
-                    {/* Add Button */}
-                    <Link href="/patients/add" className="w-[38px] h-[38px] rounded-[11px] bg-[#60A5FA] flex items-center justify-center mx-auto mb-3 shadow-[0_3px_10px_rgba(96,165,250,0.3)] hover:bg-[#3B82F6] hover:-translate-y-0.5 transition-all text-white">
-                        <Plus className="w-4 h-4" strokeWidth={3} />
-                    </Link>
+                    {/* Add Button - Only for Doctor/Nurse/Admin */}
+                    {Permissions.canAddPatient(effectiveRole) && (
+                        <Link href="/patients/add" className="w-[38px] h-[38px] rounded-[11px] bg-[#60A5FA] flex items-center justify-center mx-auto mb-3 shadow-[0_3px_10px_rgba(96,165,250,0.3)] hover:bg-[#3B82F6] hover:-translate-y-0.5 transition-all text-white">
+                            <Plus className="w-4 h-4" strokeWidth={3} />
+                        </Link>
+                    )}
 
                     {/* Navigation Menu */}
                     <nav className="flex flex-col gap-1 flex-1 pr-4">
@@ -262,6 +267,22 @@ export function Sidebar() {
                                 </Link>
                             );
                         })}
+
+                        {/* Admin Settings Link - Visible to Admin/Lab Staff */}
+                        {Permissions.canManageLabSettings(effectiveRole) && (
+                            <Link
+                                href="/admin/lab-settings"
+                                className={clsx(
+                                    'flex items-center gap-2 px-4 py-3 rounded-[14px] text-[12px] font-medium transition-all duration-200',
+                                    isActive('/admin/lab-settings')
+                                        ? 'bg-[#e1eafa] text-[#1E40AF] dark:bg-[#1E40AF] dark:text-white'
+                                        : 'text-[#3E3066] dark:text-gray-300 hover:bg-[#e1eafa] dark:hover:bg-[#374151] hover:text-[#1E40AF] dark:hover:text-white'
+                                )}
+                            >
+                                <Settings className="w-[18px] h-[18px] flex-shrink-0" />
+                                <span>ตั้งค่า Lab</span>
+                            </Link>
+                        )}
                     </nav>
 
                     {/* Logout Button */}

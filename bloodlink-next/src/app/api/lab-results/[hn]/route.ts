@@ -41,6 +41,7 @@ export async function PATCH(
     try {
         const { hn } = await params;
         const body = await request.json();
+        const { notify = false, ...updateData } = body;
 
         // TODO: Add server-side RBAC check here
         // const session = await auth();
@@ -48,7 +49,7 @@ export async function PATCH(
         //     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         // }
 
-        const result = await LabService.updateLabResult(hn, body);
+        const result = await LabService.updateLabResult(hn, updateData, notify);
 
         if (!result.success) {
             return NextResponse.json(

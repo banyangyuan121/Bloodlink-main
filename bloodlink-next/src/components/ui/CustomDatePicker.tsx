@@ -14,6 +14,7 @@ interface CustomDatePickerProps {
     placeholder?: string;
     disabled?: boolean;
     className?: string;
+    minDate?: Date;
 }
 
 // Custom styles override for DayPicker
@@ -54,7 +55,8 @@ export function CustomDatePicker({
     onChange,
     placeholder = 'Select date',
     disabled = false,
-    className
+    className,
+    minDate
 }: CustomDatePickerProps) {
     const [isOpen, setIsOpen] = React.useState(false);
 
@@ -98,6 +100,7 @@ export function CustomDatePicker({
                                 onChange(date);
                                 setIsOpen(false);
                             }}
+                            disabled={minDate ? { before: minDate } : undefined}
                             showOutsideDays
                             fixedWeeks
                             weekStartsOn={1} // Monday

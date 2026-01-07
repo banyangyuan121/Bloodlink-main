@@ -1,15 +1,51 @@
 'use client';
 
-import { useState } from 'react';
-import { Patient } from '@/types';
-import { Search, UserPlus, FileText, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Patient } from '@/types';
+import { Search, UserPlus, ChevronRight, FileText } from 'lucide-react';
 
 export function PatientList({ initialPatients }: { initialPatients: Patient[] }) {
+    const [patients, setPatients] = useState<Patient[]>(initialPatients);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('All'); // 'All' | 'Active' | 'Pending'
 
-    const filteredPatients = initialPatients.filter(p => {
+    // Real-time subscription
+    useEffect(() => {
+        const channel = supabase
+            .channel('realtime-patients')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'patients' },
+                (payload) => {
+                    console.log('Real-time patient update:', payload);
+                    if (payload.eventType === 'INSERT') {
+                        setPatients((prev) => [payload.new as Patient, ...prev]);
+                    } else if (payload.eventType === 'UPDATE') {
+                        setPatients((prev) =>
+                            prev.map((p) => (p.hn === (payload.new as Patient).hn ? (payload.new as Patient) : p))
+                        );
+                    } else if (payload.eventType === 'DELETE') {
+                        setPatients((prev) =>
+                            prev.filter((p) => p.hn !== (payload.old as Patient).hn)
+                        );
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    // Update local state if initialPatients changes (e.g. parent re-fetch)
+    useEffect(() => {
+        setPatients(initialPatients);
+    }, [initialPatients]);
+
+    const filteredPatients = patients.filter(p => {
         const matchesSearch =
             p.name.toLowerCase().includes(search.toLowerCase()) ||
             p.surname.toLowerCase().includes(search.toLowerCase()) ||

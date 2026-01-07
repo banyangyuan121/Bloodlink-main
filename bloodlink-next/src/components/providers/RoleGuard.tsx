@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 
 interface RoleGuardProps {
     children: React.ReactNode;
+    allowedRoles?: string[];
 }
 
 // Public paths that don't require role validation
@@ -18,7 +19,7 @@ const PUBLIC_PATHS = ['/login', '/register', '/', '/forgot-password', '/reset-pa
  * Users without a valid role cannot access protected pages.
  * Valid roles: แพทย์, พยาบาล, เจ้าหน้าที่ห้องปฏิบัติการ, ผู้ดูแล
  */
-export function RoleGuard({ children }: RoleGuardProps) {
+export function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
     const { data: session, status, update } = useSession();
     const pathname = usePathname();
     const router = useRouter();
@@ -60,12 +61,34 @@ export function RoleGuard({ children }: RoleGuardProps) {
             // Role is loaded - validate it (with whitespace trimming)
             const effectiveRole = getEffectiveRole(userRole);
             if (isValidRole(effectiveRole)) {
-                setRoleStatus('valid');
+                // If allowedRoles is specified, check against it
+                if (allowedRoles && allowedRoles.length > 0) {
+                    // Check if current user role is in the allowed list
+                    // We need to map role names if they differ (e.g. 'admin' vs 'ผู้ดูแล')
+                    // Assuming allowedRoles uses internal keys or exact matches?
+                    // Let's assume broad matching for now or specific keys if defined in permissions
+                    const currentRoleString = effectiveRole || '';
+                    const hasPermission = allowedRoles.some(role =>
+                        currentRoleString.toLowerCase().includes(role.toLowerCase()) ||
+                        role === 'admin' && currentRoleString.includes('ผู้ดูแล') ||
+                        role === 'doctor' && currentRoleString.includes('แพทย์') ||
+                        role === 'medtech' && currentRoleString.includes('เจ้าหน้าที่ห้องปฏิบัติการ') ||
+                        role === 'nurse' && currentRoleString.includes('พยาบาล')
+                    );
+
+                    if (hasPermission) {
+                        setRoleStatus('valid');
+                    } else {
+                        setRoleStatus('invalid');
+                    }
+                } else {
+                    setRoleStatus('valid');
+                }
             } else {
                 setRoleStatus('invalid');
             }
         }
-    }, [status, session?.user?.role, pathname, router, update, isPublicPath]);
+    }, [status, session?.user?.role, pathname, router, update, isPublicPath, allowedRoles]);
 
     // Show loading while checking
     if (roleStatus === 'loading' && !isPublicPath) {

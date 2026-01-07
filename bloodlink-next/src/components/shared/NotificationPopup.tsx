@@ -72,7 +72,15 @@ export function NotificationPopup({ isOpen, onClose, onAction, type, title, mess
                     <p className="text-[14px] text-gray-500 dark:text-gray-400 mb-8">{message}</p>
                 </div>
 
-                {/* Action Buttons - Removed as requested */}
+                {/* Action Buttons */}
+                {onAction && (
+                    <button
+                        onClick={onAction}
+                        className="w-full py-3 bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-xl font-medium transition-colors shadow-sm dark:shadow-none"
+                    >
+                        เปิดดูรายการ
+                    </button>
+                )}
             </div>
         </div>
     );

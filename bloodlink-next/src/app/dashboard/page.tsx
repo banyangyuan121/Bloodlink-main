@@ -4,12 +4,15 @@ import { Header } from '@/components/layout/Header';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Heart, UserPlus, FileText, Search, ShieldCheck, Database, Calendar, Smartphone, Settings, Users, Clock, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Patient } from '@/types';
 import { useSession } from 'next-auth/react';
 import { Permissions } from '@/lib/permissions';
+import { supabase } from '@/lib/supabase';
 import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 import { CountUp } from '@/components/ui/CountUp';
+
+import packageJson from '../../../package.json';
 
 interface DashboardStats {
     totalPatients: number;
@@ -37,7 +40,7 @@ export default function DashboardPage() {
     const [systemInfo, setSystemInfo] = useState<SystemInfo>({
         dbStatus: 'checking',
         lastUpdated: '-',
-        version: '1.0.0'
+        version: packageJson.version
     });
 
     useEffect(() => {
@@ -56,11 +59,30 @@ export default function DashboardPage() {
                         ).length
                     });
 
+                    // Find the latest timestamp
+                    let latestTime = '-';
+                    if (patients.length > 0) {
+                        const timestamps = patients
+                            .filter(p => p.timestamp)
+                            .map(p => new Date(p.timestamp).getTime());
+
+                        if (timestamps.length > 0) {
+                            const maxTime = Math.max(...timestamps);
+                            latestTime = new Date(maxTime).toLocaleDateString('th-TH', {
+                                day: 'numeric',
+                                month: 'long',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                        }
+                    }
+
                     // Update system info with successful connection
                     setSystemInfo(prev => ({
                         ...prev,
                         dbStatus: 'connected',
-                        lastUpdated: new Date().toLocaleDateString('th-TH', {
+                        lastUpdated: latestTime !== '-' ? latestTime : new Date().toLocaleDateString('th-TH', {
                             day: 'numeric',
                             month: 'long',
                             year: 'numeric',
@@ -80,6 +102,23 @@ export default function DashboardPage() {
         }
 
         fetchStats();
+
+        // Real-time subscription for Stats
+        const channel = supabase
+            .channel('realtime-dashboard-stats')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'patients' },
+                () => {
+                    console.log('Real-time update: Refreshing dashboard stats...');
+                    fetchStats();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
 

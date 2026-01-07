@@ -8,10 +8,11 @@ import { SessionProvider, useSession } from 'next-auth/react';
 import { Permissions } from '@/lib/permissions';
 import { useEffectiveRole } from '@/hooks/useEffectiveRole';
 import Link from 'next/link';
-import { Edit2, Save, X } from 'lucide-react';
+import { Edit2, Save, Send, X } from 'lucide-react';
 import { formatDateTimeThai } from '@/lib/utils';
 import { toast } from 'sonner';
 import { LabAlert } from '@/components/ui/LabAlert';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
 
 // Helper to check if value is outside range
 const checkAbnormal = (val: string | undefined | null, range: string): boolean => {
@@ -59,29 +60,22 @@ interface PatientInfo {
     hn: string;
     name: string;
     surname: string;
+    process?: string;
 }
 
-const CBC_TESTS = [
-    { name: 'WBC', key: 'wbc', unit: '10*3/μ', range: '4.23-9.07' },
-    { name: 'RBC', key: 'rbc', unit: '10*6/μL', range: '4.63-6.08' },
-    { name: 'Hemoglobin', key: 'hb', unit: 'g/dL', range: '13.7-17.5' },
-    { name: 'Hematocrit', key: 'hct', unit: '%', range: '40.1-51' },
-    { name: 'MCV', key: 'mcv', unit: 'fL', range: '79-92.2' },
-    { name: 'MCH', key: 'mch', unit: 'pg', range: '25.7-32.2' },
-    { name: 'MCHC', key: 'mchc', unit: 'g/dL', range: '32.3-36.5' },
-    { name: 'Platelet count', key: 'plt', unit: '10*3/μL', range: '140-400' },
+const LAB_TEST_ORDER = [
+    'wbc', 'rbc', 'hb', 'hct', 'mcv', 'mch', 'mchc', 'plt',
+    'neutrophil', 'lymphocyte', 'monocyte', 'eosinophil', 'basophil',
+    'plateletSmear', 'nrbc', 'rbcMorphology'
 ];
 
-const DIFFERENTIAL_TESTS = [
-    { name: 'Neutrophil', key: 'neutrophil', unit: '%', range: '34-67.9' },
-    { name: 'Lymphocyte', key: 'lymphocyte', unit: '%', range: '21.8-53.1' },
-    { name: 'Monocyte', key: 'monocyte', unit: '%', range: '5.3-12.2' },
-    { name: 'Eosinophil', key: 'eosinophil', unit: '%', range: '0.8-7' },
-    { name: 'Basophil', key: 'basophil', unit: '%', range: '0.2-1.2' },
-    { name: 'Platelet from smear', key: 'plateletSmear', unit: '', range: '' },
-    { name: 'NRBC (cell/100 WBC)', key: 'nrbc', unit: 'cell/100 WBC', range: '' },
-    { name: 'RBC Morphology', key: 'rbcMorphology', unit: '', range: '' },
-];
+interface LabRange {
+    test_key: string;
+    test_name: string;
+    min_value: number | null;
+    max_value: number | null;
+    unit: string | null;
+}
 
 function BloodTestResultsContent() {
     const params = useParams();
@@ -90,10 +84,12 @@ function BloodTestResultsContent() {
     const [patient, setPatient] = useState<PatientInfo | null>(null);
     const [labResults, setLabResults] = useState<LabResult | null>(null);
     const [editData, setEditData] = useState<LabResult | null>(null);
+    const [ranges, setRanges] = useState<LabRange[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
     // Permission check
     const { data: session } = useSession();
@@ -105,14 +101,23 @@ function BloodTestResultsContent() {
 
         const fetchData = async () => {
             try {
-                const response = await fetch(`/api/lab-results/${hn}`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch');
+                // Fetch Patient & Results
+                const resultRes = await fetch(`/api/lab-results/${hn}`);
+                // Fetch Reference Ranges
+                const rangesRes = await fetch('/api/settings/lab-ranges');
+
+                if (!resultRes.ok || !rangesRes.ok) {
+                    throw new Error('Failed to fetch data');
                 }
-                const data = await response.json();
-                setPatient(data.patient);
-                setLabResults(data.labResults);
-                setEditData(data.labResults);
+
+                const resultData = await resultRes.json();
+                const rangesData = await rangesRes.json();
+
+                setPatient(resultData.patient);
+                setLabResults(resultData.labResults);
+                setEditData(resultData.labResults);
+                setRanges(rangesData);
+
             } catch (err) {
                 console.error('Fetch error:', err);
                 setError('ไม่พบข้อมูลผลตรวจเลือด');
@@ -141,7 +146,7 @@ function BloodTestResultsContent() {
         setIsEditing(false);
     };
 
-    const handleSave = async () => {
+    const handleSave = async (notify: boolean = false) => {
         if (!editData) return;
 
         setIsSaving(true);
@@ -149,13 +154,19 @@ function BloodTestResultsContent() {
             const response = await fetch(`/api/lab-results/${hn}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(editData),
+                // Include notify flag in the body, LabService handles separation
+                body: JSON.stringify({ ...editData, notify }),
             });
 
             if (response.ok) {
                 setLabResults({ ...editData });
                 setIsEditing(false);
-                toast.success('บันทึกผลตรวจเรียบร้อยแล้ว');
+                setIsConfirmModalOpen(false);
+                if (notify) {
+                    toast.success('บันทึกและส่งแจ้งเตือนเรียบร้อยแล้ว');
+                } else {
+                    toast.success('บันทึกร่างเรียบร้อยแล้ว');
+                }
             } else {
                 const data = await response.json();
                 toast.error(data.error || 'เกิดข้อผิดพลาดในการบันทึก');
@@ -168,17 +179,63 @@ function BloodTestResultsContent() {
         }
     };
 
+    const handleApproveResult = async () => {
+        if (!patient || !labResults) return;
+
+        // Optimistic UI update (optional, but let's wait for API)
+        const processPromise = async () => {
+            const response = await fetch(`/api/patients/${hn}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'เสร็จสิ้น',
+                    history: 'แพทย์ยืนยันผลการตรวจสอบ',
+                    // We can pass user info if we had it from session here, 
+                    // but the API usually handles it or we rely on session in API
+                    changedByName: session?.user?.name,
+                    changedByEmail: session?.user?.email,
+                    changedByRole: effectiveRole
+                }),
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to update status');
+            }
+
+            // Update local patient state
+            setPatient(prev => prev ? { ...prev, process: 'เสร็จสิ้น' } : null);
+            return 'ยืนยันผลการตรวจสอบเรียบร้อย';
+        };
+
+        toast.promise(processPromise(), {
+            loading: 'กำลังยืนยันผล...',
+            success: (msg) => msg,
+            error: (err) => err.message
+        });
+    };
+
     const handleInputChange = (key: string, value: string, isNote: boolean = false) => {
         if (!editData) return;
         const fieldKey = isNote ? `${key}_note` : key;
         setEditData({ ...editData, [fieldKey]: value });
     };
 
-    const renderTestRow = (test: { name: string; key: string; unit: string; range: string }, separatorTop?: boolean, separatorBottom?: boolean) => {
-        const value = labResults?.[test.key as keyof LabResult] || '-';
-        const note = labResults?.[`${test.key}_note` as keyof LabResult] || '-';
-        const editValue = editData?.[test.key as keyof LabResult] || '';
-        const editNote = editData?.[`${test.key}_note` as keyof LabResult] || '';
+    const formatRange = (min: number | null, max: number | null) => {
+        if (min !== null && max !== null) return `${min}-${max}`;
+        if (min !== null) return `> ${min}`;
+        if (max !== null) return `< ${max}`;
+        return '';
+    };
+
+    const renderTestRow = (test: LabRange, separatorTop?: boolean, separatorBottom?: boolean) => {
+        const value = labResults?.[test.test_key as keyof LabResult] || '-';
+        const note = labResults?.[`${test.test_key}_note` as keyof LabResult] || '-';
+        const editValue = editData?.[test.test_key as keyof LabResult] || '';
+        const editNote = editData?.[`${test.test_key}_note` as keyof LabResult] || '';
+
+        // Dynamic Range String
+        const rangeStr = formatRange(test.min_value, test.max_value);
 
         let borderClasses = 'border-b border-gray-200 dark:border-gray-700';
         if (separatorTop) {
@@ -189,28 +246,28 @@ function BloodTestResultsContent() {
         }
 
         return (
-            <tr key={test.key} className={borderClasses}>
-                <td className="py-2 px-4 text-[13px] text-gray-700 dark:text-gray-200">{test.name}</td>
+            <tr key={test.test_key} className={borderClasses}>
+                <td className="py-2 px-4 text-[13px] text-gray-700 dark:text-gray-200">{test.test_name}</td>
                 <td className="py-2 px-4 text-[13px] text-gray-600 dark:text-gray-300">
                     {isEditing ? (
                         <input
                             type="text"
-                            value={editValue}
-                            onChange={(e) => handleInputChange(test.key, e.target.value)}
+                            value={String(editValue)}
+                            onChange={(e) => handleInputChange(test.test_key, e.target.value)}
                             className="w-full px-2 py-1 text-[13px] border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
                     ) : (
-                        <LabAlert isAbnormal={checkAbnormal(String(value), test.range)} val={String(value)} />
+                        <LabAlert isAbnormal={checkAbnormal(String(value), rangeStr)} val={String(value)} />
                     )}
                 </td>
-                <td className="py-2 px-4 text-[13px] text-gray-500 dark:text-gray-400">{test.unit}</td>
-                <td className="py-2 px-4 text-[13px] text-gray-500 dark:text-gray-400">{test.range}</td>
+                <td className="py-2 px-4 text-[13px] text-gray-500 dark:text-gray-400">{test.unit || ''}</td>
+                <td className="py-2 px-4 text-[13px] text-gray-500 dark:text-gray-400">{rangeStr}</td>
                 <td className="py-2 px-4 text-[13px] text-gray-500 dark:text-gray-400">
                     {isEditing ? (
                         <input
                             type="text"
-                            value={editNote}
-                            onChange={(e) => handleInputChange(test.key, e.target.value, true)}
+                            value={String(editNote)}
+                            onChange={(e) => handleInputChange(test.test_key, e.target.value, true)}
                             className="w-full px-2 py-1 text-[13px] border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             placeholder="หมายเหตุ..."
                         />
@@ -221,6 +278,15 @@ function BloodTestResultsContent() {
             </tr>
         );
     };
+
+    // Filter and Sort Ranges
+    const cbcTests = ranges.filter(r =>
+        ['wbc', 'rbc', 'hb', 'hct', 'mcv', 'mch', 'mchc', 'plt'].includes(r.test_key)
+    ).sort((a, b) => LAB_TEST_ORDER.indexOf(a.test_key) - LAB_TEST_ORDER.indexOf(b.test_key));
+
+    const diffTests = ranges.filter(r =>
+        ['neutrophil', 'lymphocyte', 'monocyte', 'eosinophil', 'basophil', 'plateletSmear', 'nrbc', 'rbcMorphology'].includes(r.test_key)
+    ).sort((a, b) => LAB_TEST_ORDER.indexOf(a.test_key) - LAB_TEST_ORDER.indexOf(b.test_key));
 
     if (isLoading) {
         return (
@@ -272,15 +338,15 @@ function BloodTestResultsContent() {
                 <div className="print-hide">
                     <Sidebar />
                 </div>
-                <div className="ml-0 md:ml-[195px] print:ml-0 flex-1 flex flex-col min-h-screen print-container">
-                    <main className="flex-1 bg-[#F3F4F6] dark:bg-[#0f1115] px-2 sm:p-3 pt-0 transition-colors print:bg-white pb-8">
+                <div className="ml-0 md:ml-[195px] print:ml-0 flex-1 flex flex-col min-h-screen print-container w-full overflow-x-hidden">
+                    <main className="flex-1 bg-[#F3F4F6] dark:bg-[#0f1115] p-3 sm:p-6 lg:p-8 pt-0 transition-colors print:bg-white pb-8">
                         <div className="w-full sm:max-w-[960px] mx-auto print:max-w-none">
                             <div className="print-hide">
                                 <Header />
                             </div>
 
                             {/* Blood Test Card */}
-                            <div className="bg-white dark:bg-[#1e1e2e] rounded-xl shadow-sm overflow-hidden print-card">
+                            <div className="bg-white dark:bg-[#1e1e2e] rounded-3xl shadow-sm overflow-hidden print-card border border-gray-100 dark:border-gray-700">
                                 <div className="p-3 sm:p-5 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start gap-4">
                                     <div className="flex items-center gap-3 sm:gap-4">
                                         {/* Profile Icon */}
@@ -290,11 +356,11 @@ function BloodTestResultsContent() {
                                             </svg>
                                         </div>
                                         <div>
-                                            <h1 className="text-lg sm:text-xl font-semibold text-[#1F2937] dark:text-white mb-2">
+                                            <h1 className="text-lg sm:text-xl font-semibold text-[#1F2937] dark:text-white mb-2 break-all sm:break-normal">
                                                 {patient.name} {patient.surname}
                                             </h1>
                                             {/* HN Digits in Boxes */}
-                                            <div className="flex gap-1">
+                                            <div className="flex flex-wrap gap-1">
                                                 {String(patient.hn).split('').map((digit, i) => (
                                                     <span
                                                         key={i}
@@ -309,6 +375,19 @@ function BloodTestResultsContent() {
 
                                     {/* Action Buttons */}
                                     <div className="print-hide flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
+                                        {/* Doctor Approve Button */}
+                                        {canEditLab && Permissions.isDoctor(effectiveRole) && patient?.process === 'กำลังตรวจ' && !isEditing && (
+                                            <button
+                                                onClick={handleApproveResult}
+                                                className="flex items-center gap-2 px-4 py-2 bg-[#10B981] text-white rounded-lg hover:bg-[#059669] transition-colors text-sm font-medium"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                ยืนยันผลการตรวจสอบ
+                                            </button>
+                                        )}
+
                                         {canEditLab && !isEditing && (
                                             <button
                                                 onClick={handleStartEdit}
@@ -328,12 +407,20 @@ function BloodTestResultsContent() {
                                                     ยกเลิก
                                                 </button>
                                                 <button
-                                                    onClick={handleSave}
+                                                    onClick={() => handleSave(false)}
                                                     disabled={isSaving}
-                                                    className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-white rounded-lg hover:bg-[#16A34A] transition-colors text-sm font-medium disabled:opacity-50"
+                                                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium disabled:opacity-50"
                                                 >
                                                     <Save className="w-4 h-4" />
-                                                    {isSaving ? 'กำลังบันทึก...' : 'บันทึก'}
+                                                    {isSaving ? '...' : 'บันทึกร่าง'}
+                                                </button>
+                                                <button
+                                                    onClick={() => setIsConfirmModalOpen(true)}
+                                                    disabled={isSaving}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-[#22C55E] text-white rounded-lg hover:bg-[#16A34A] transition-colors text-sm font-medium disabled:opacity-50 shadow-lg shadow-green-500/20"
+                                                >
+                                                    <Send className="w-4 h-4" />
+                                                    {isSaving ? 'กำลังส่ง...' : 'ยืนยันและส่งผล'}
                                                 </button>
                                             </>
                                         )}
@@ -350,30 +437,44 @@ function BloodTestResultsContent() {
                                 </div>
 
                                 {/* Results Table */}
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="border-b-2 border-gray-200 dark:border-gray-600">
-                                                <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200 w-[200px]">Test / Description</th>
-                                                <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200 w-[150px]">Result</th>
-                                                <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200 w-[100px]">Unit</th>
-                                                <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200 w-[120px]">Normal Range</th>
-                                                <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200">หมายเหตุ</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {/* CBC Section Header */}
-                                            <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                                <td colSpan={5} className="py-2 px-4 text-[13px] font-semibold text-gray-800 dark:text-gray-200">CBC</td>
-                                            </tr>
+                                <div className="border-t border-gray-100 dark:border-gray-700">
+                                    <div className="overflow-x-auto custom-scrollbar">
+                                        <table className="w-full min-w-[700px]">
+                                            <thead className="bg-gray-50/50 dark:bg-gray-800/50">
+                                                <tr className="border-b border-gray-200 dark:border-gray-700">
+                                                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200 w-[200px]">Test / Description</th>
+                                                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200 w-[150px]">Result</th>
+                                                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200 w-[100px]">Unit</th>
+                                                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200 w-[120px]">Normal Range</th>
+                                                    <th className="text-left py-3 px-4 text-[13px] font-semibold text-gray-700 dark:text-gray-200">หมายเหตุ</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                                {/* CBC Header */}
+                                                <tr>
+                                                    <td colSpan={5} className="py-2 px-4 text-sm font-bold text-gray-800 dark:text-gray-100 bg-gray-50/30 dark:bg-gray-800/30">
+                                                        CBC
+                                                    </td>
+                                                </tr>
+                                                {/* CBC Tests */}
+                                                {cbcTests.map((test) => renderTestRow(test))}
 
-                                            {/* CBC Tests */}
-                                            {CBC_TESTS.map((test) => renderTestRow(test))}
+                                                {/* Differential Header (Optional, but adds spacing) */}
+                                                {/* The screenshot shows just a clean list, but maybe the user wants the section headers back because they said "table like this is gone" */}
+                                                {/* I will add a subtle spacer or check if Differential header is needed. */}
+                                                {/* Wait, the screenshot shows 'CBC' bolded at the top of the test list. */}
 
-                                            {/* Differential Section with separator */}
-                                            {DIFFERENTIAL_TESTS.map((test, index) => renderTestRow(test, index === 0, index === 1))}
-                                        </tbody>
-                                    </table>
+                                                {/* Differential Tests */}
+                                                {diffTests.map((test) =>
+                                                    renderTestRow(
+                                                        test,
+                                                        test.test_key === 'neutrophil', // separatorTop for Neutrophil
+                                                        test.test_key === 'lymphocyte'  // separatorBottom for Lymphocyte
+                                                    )
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
 
                                 {/* Timestamp Footer */}
@@ -407,6 +508,18 @@ function BloodTestResultsContent() {
                     </main>
                 </div>
             </div>
+            {/* Confirmation Modal */}
+            <ConfirmModal
+                isOpen={isConfirmModalOpen}
+                onClose={() => setIsConfirmModalOpen(false)}
+                onConfirm={() => handleSave(true)}
+                title="ยืนยันการส่งผลตรวจ"
+                description="คุณต้องการยืนยันและส่งผลการตรวจเลือดหรือไม่? เมื่อยืนยันแล้วระบบจะส่งการแจ้งเตือนไปยังแพทย์ผู้รับผิดชอบทันที"
+                confirmText="ยืนยันและส่ง"
+                cancelText="ตรวจสอบอีกครั้ง"
+                variant="primary"
+                isLoading={isSaving}
+            />
         </>
     );
 }
@@ -416,6 +529,7 @@ export default function BloodTestResultsPage() {
     return (
         <SessionProvider>
             <BloodTestResultsContent />
+            <div id="modal-root" />
         </SessionProvider>
     );
 }

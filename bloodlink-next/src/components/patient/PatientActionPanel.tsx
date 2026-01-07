@@ -248,6 +248,7 @@ export function PatientActionPanel({ patient }: PatientActionPanelProps) {
                                                                 }
                                                             }}
                                                             placeholder="เลือกวันที่"
+                                                            minDate={new Date(new Date().setHours(0, 0, 0, 0))}
                                                         />
                                                     </div>
                                                     <div>

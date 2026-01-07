@@ -91,9 +91,9 @@ export default function ResultsPage() {
             <div className="max-w-[960px] w-full mx-auto flex flex-col h-full">
                 <Header />
 
-                <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-96px)] pb-4">
+                <div className="flex flex-col-reverse lg:flex-row gap-4 h-auto lg:h-[calc(100vh-96px)] pb-4">
                     {/* Left Column: Results List */}
-                    <div className="flex-1 bg-[#F3F4F6] dark:bg-transparent rounded-[20px] flex flex-col overflow-hidden transition-colors">
+                    <div className="flex-1 bg-[#F3F4F6] dark:bg-transparent rounded-[20px] flex flex-col overflow-hidden transition-colors min-h-[500px]">
                         <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-shrink-0 animate-fade-in-up">
                             <h1 className="text-[22px] font-bold text-[#111827] dark:text-white">ผลตรวจเลือด</h1>
                             <Link href="/test-status" className="flex items-center gap-1.5 text-[#6366F1] dark:text-indigo-400 font-semibold hover:text-[#4F46E5] dark:hover:text-indigo-300 transition-colors text-[13px]">
@@ -107,7 +107,7 @@ export default function ResultsPage() {
                             <div className="h-[3px] w-full bg-[#E0E7FF] dark:bg-gray-700 rounded-full mb-3"></div>
                         </div>
 
-                        <div className="overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
                             {isLoading ? (
                                 <div className="flex justify-center p-8">
                                     <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
@@ -141,7 +141,7 @@ export default function ResultsPage() {
 
                     {/* Right Column: Filter Widget */}
                     <div className="w-full lg:w-[240px] flex flex-col gap-3 flex-shrink-0 animate-fade-in-right">
-                        <div className="bg-[#E9EFFD] dark:bg-[#1F2937] rounded-[20px] p-4 flex flex-col items-center text-center h-full max-h-[400px] transition-colors">
+                        <div className="bg-[#E9EFFD] dark:bg-[#1F2937] rounded-[20px] p-4 flex flex-col items-center text-center h-auto lg:h-full lg:max-h-[400px] transition-colors shadow-sm lg:shadow-none">
                             <div className="bg-white dark:bg-[#374151] rounded-[16px] p-4 w-full shadow-sm flex flex-col items-center transition-colors">
                                 <h3 className="text-[14px] font-bold text-[#1F2937] dark:text-white mb-1.5 leading-tight">เช็ควันและประเภท<br />ในการตรวจที่ผ่านมา</h3>
 

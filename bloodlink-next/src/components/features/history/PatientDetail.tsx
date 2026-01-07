@@ -170,7 +170,10 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
     // Updated: canManageStaff now uses isResponsible
     const canManageStaff = Permissions.canManageStaff(effectiveRole, isResponsible);
     const canDeleteRole = Permissions.canDeletePatient(effectiveRole, isOwner);
-    const canUpdateStatus = Permissions.canSeeStatusPanel(effectiveRole); // Changed: Now all roles can see status panel
+    const canUpdateStatus = patientData ? (
+        Permissions.isAdmin(effectiveRole) ||
+        Permissions.getNextAllowedStatus(effectiveRole, patientData.process) !== null
+    ) : false;
     const canEditLab = Permissions.canEditLab(effectiveRole);
 
     // Lab History State
@@ -196,12 +199,17 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
     });
 
     useEffect(() => {
-        async function fetchPatient() {
+        async function fetchPatient(retries = 3, delay = 500) {
             try {
                 setIsLoading(true);
                 const response = await fetch(`/api/patients/${hn}`);
 
                 if (!response.ok) {
+                    if (response.status === 404 && retries > 0) {
+                        console.log(`Patient not found, retrying in ${delay}ms... (${retries} retries left)`);
+                        setTimeout(() => fetchPatient(retries - 1, delay * 2), delay);
+                        return;
+                    }
                     throw new Error('Patient not found');
                 }
 
@@ -237,24 +245,28 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                 setTempStatus(mapped.process);
 
                 // Fetch Appointment History
-                let appHistory = await AppointmentService.getAppointmentsByHn(hn);
-
-                // Mock data removed
-
-                setAppointmentHistory(appHistory);
+                try {
+                    let appHistory = await AppointmentService.getAppointmentsByHn(hn);
+                    setAppointmentHistory(appHistory);
+                } catch (e) {
+                    console.error('Failed to fetch appointments:', e);
+                }
 
                 // Fetch Lab History
-                let labHist = await LabService.getLabHistory(hn);
+                try {
+                    let labHist = await LabService.getLabHistory(hn);
+                    setLabHistory(labHist);
+                } catch (e) {
+                    console.error('Failed to fetch labs:', e);
+                }
 
-                // Mock data removed
-
-                setLabHistory(labHist);
-
+                setIsLoading(false); // Only set loading false on success or final failure
             } catch (err) {
                 console.error('Failed to fetch patient:', err);
-                setError('ไม่พบข้อมูลผู้ป่วย');
-            } finally {
-                setIsLoading(false);
+                if (retries === 0) {
+                    setError('ไม่พบข้อมูลผู้ป่วย');
+                    setIsLoading(false);
+                }
             }
         }
 
@@ -1069,7 +1081,7 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
 
                 {/* Timeline + Action Section */}
                 <div className="flex justify-start -mb-2.5 z-10 relative pl-4">
-                    {canEditLab && (
+                    {canEditLab && canUpdateStatus && (
                         <button
                             onClick={() => setShowStatusModal(true)}
                             className="text-[#6366F1] dark:text-indigo-400 text-[11px] font-medium flex items-center gap-1 cursor-pointer hover:text-[#4F46E5] dark:hover:text-indigo-300 bg-[#F3F4F6] dark:bg-gray-800 px-2 py-0.5 rounded-full border-none outline-none"
@@ -1135,25 +1147,32 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
 
                         <div className="p-6">
                             <div className="flex flex-wrap gap-2 mb-4">
-                                {['รอตรวจ', 'นัดหมาย', 'เจาะเลือด', 'กำลังจัดส่ง', 'กำลังตรวจ', 'เสร็จสิ้น'].map((option) => (
-                                    <label
-                                        key={option}
-                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all ${tempStatus === option
-                                            ? 'bg-[#EFF6FF] dark:bg-blue-900/30 border-[#60A5FA] dark:border-blue-600 text-[#1e1b4b] dark:text-white'
-                                            : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
-                                            }`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="status"
-                                            value={option}
-                                            checked={tempStatus === option}
-                                            onChange={(e) => setTempStatus(e.target.value)}
-                                            className="w-4 h-4 text-[#60A5FA]"
-                                        />
-                                        <span className="text-sm font-medium">{option}</span>
-                                    </label>
-                                ))}
+                                {['รอตรวจ', 'นัดหมาย', 'เจาะเลือด', 'กำลังจัดส่ง', 'กำลังตรวจ', 'เสร็จสิ้น'].map((option) => {
+                                    const isDisabled = !Permissions.canUpdateToStatus(effectiveRole, patientData?.process, option) && option !== tempStatus;
+                                    return (
+                                        <label
+                                            key={option}
+                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${isDisabled ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'cursor-pointer'
+                                                } ${tempStatus === option
+                                                    ? 'bg-[#EFF6FF] dark:bg-blue-900/30 border-[#60A5FA] dark:border-blue-600 text-[#1e1b4b] dark:text-white'
+                                                    : isDisabled
+                                                        ? 'border-gray-200 dark:border-gray-700 text-gray-400'
+                                                        : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+                                                }`}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="status"
+                                                value={option}
+                                                checked={tempStatus === option}
+                                                onChange={(e) => setTempStatus(e.target.value)}
+                                                className="w-4 h-4 text-[#60A5FA]"
+                                                disabled={isDisabled}
+                                            />
+                                            <span className="text-sm font-medium">{option}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
 
                             {tempStatus === 'นัดหมาย' && (
@@ -1182,8 +1201,19 @@ export const PatientDetail = ({ hn, backPath }: PatientDetailProps) => {
                                                 <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">วันที่</label>
                                                 <CustomDatePicker
                                                     value={appointmentDate ? new Date(appointmentDate) : undefined}
-                                                    onChange={(d) => setAppointmentDate(d ? d.toISOString().split('T')[0] : '')}
+                                                    onChange={(d) => {
+                                                        if (d) {
+                                                            // Force local YYYY-MM-DD string to avoid timezone shifts
+                                                            const year = d.getFullYear();
+                                                            const month = String(d.getMonth() + 1).padStart(2, '0');
+                                                            const day = String(d.getDate()).padStart(2, '0');
+                                                            setAppointmentDate(`${year}-${month}-${day}`);
+                                                        } else {
+                                                            setAppointmentDate('');
+                                                        }
+                                                    }}
                                                     placeholder="เลือกวันที่"
+                                                    minDate={new Date(new Date().setHours(0, 0, 0, 0))} // Disable past dates (today allowed)
                                                 />
                                             </div>
                                         </div>

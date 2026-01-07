@@ -17,6 +17,8 @@ import { deletePatient } from '@/lib/actions/patient'; // Import delete action
 import { StaggerContainer, FadeIn, ListAnimatePresence } from '@/components/ui/MotionPrimitives';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { AnimatePresence } from 'framer-motion';
+import { supabase } from '@/lib/supabase';
+import { useMemo } from 'react';
 
 // Severity color mapping based on days overdue
 const getSeverityColor = (daysOverdue: number) => {
@@ -59,7 +61,7 @@ interface PatientListProps {
 
 export const PatientList = ({ basePath, title = 'ประวัติผู้ป่วย' }: PatientListProps) => {
     const [patients, setPatients] = useState<Patient[]>([]);
-    const [missedPatients, setMissedPatients] = useState<(Patient & { daysOverdue: number })[]>([]);
+    // removed local state missedPatients, will derive it from patients
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -97,31 +99,70 @@ export const PatientList = ({ basePath, title = 'ประวัติผู้�
                 const activePatients = data.filter(p => p.status === 'ใช้งาน');
                 setPatients(activePatients);
 
-                // Calculate missed appointments (overdue patients)
-                const overdue = activePatients
-                    .map(p => ({
-                        ...p,
-                        daysOverdue: calculateDaysOverdue(p.appointmentDate)
-                    }))
-                    .filter(p => p.daysOverdue > 0 && p.process === 'นัดหมาย')
-                    .sort((a, b) => b.daysOverdue - a.daysOverdue)
-                    .slice(0, 10); // Limit to 10
-
-                setMissedPatients(overdue);
+                setPatients(activePatients);
+                // setMissedPatients removed
             } catch (err) {
                 console.error('Error fetching patients:', err);
                 setError('ไม่สามารถโหลดข้อมูลได้');
 
                 // Fallback to empty arrays
                 setPatients([]);
-                setMissedPatients([]);
+                setPatients([]);
             } finally {
                 setIsLoading(false);
             }
         }
 
         fetchPatients();
+
+        // Real-time subscription
+        const channel = supabase
+            .channel('realtime-history-patients')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'patients' },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        // Only add if active status (or handle logic)
+                        const newPatient = payload.new as Patient;
+                        if (newPatient.status === 'ใช้งาน') {
+                            setPatients((prev) => [newPatient, ...prev]);
+                        }
+                    } else if (payload.eventType === 'UPDATE') {
+                        setPatients((prev) =>
+                            prev.map((p) => {
+                                if (p.hn === (payload.new as Patient).hn) {
+                                    // If updated to inactive, maybe remove? For now just update
+                                    return payload.new as Patient;
+                                }
+                                return p;
+                            }).filter(p => p.status === 'ใช้งาน') // Re-filter if status changed
+                        );
+                    } else if (payload.eventType === 'DELETE') {
+                        setPatients((prev) =>
+                            prev.filter((p) => p.hn !== (payload.old as Patient).hn)
+                        );
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
+
+    // Derived state for missed appointments
+    const missedPatients = useMemo(() => {
+        return patients
+            .map(p => ({
+                ...p,
+                daysOverdue: calculateDaysOverdue(p.appointmentDate)
+            }))
+            .filter(p => p.daysOverdue > 0 && p.process === 'นัดหมาย')
+            .sort((a, b) => b.daysOverdue - a.daysOverdue)
+            .slice(0, 10);
+    }, [patients]);
 
     const handleConfirmDelete = async () => {
         setIsDeleting(true);

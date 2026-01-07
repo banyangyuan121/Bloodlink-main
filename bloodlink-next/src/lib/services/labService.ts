@@ -118,7 +118,7 @@ export class LabService {
         }
     }
 
-    static async updateLabResult(hn: string, data: Partial<LabResult>): Promise<{ success: boolean; error?: string }> {
+    static async updateLabResult(hn: string, data: Partial<LabResult>, notifyDoctor: boolean = false): Promise<{ success: boolean; error?: string }> {
         try {
             // Map camelCase to snake_case for DB columns
             const dbData: any = {};
@@ -178,18 +178,41 @@ export class LabService {
                     console.error('Insert new lab result error:', insertError);
                     return { success: false, error: insertError.message };
                 }
-                return { success: true };
+            } else {
+                const { error } = await supabase
+                    .from('lab_results')
+                    .update(dbData)
+                    .eq('id', existing.id);
+
+                if (error) {
+                    console.error('Update lab result error:', error);
+                    return { success: false, error: error.message };
+                }
             }
 
-            const { error } = await supabase
-                .from('lab_results')
-                .update(dbData)
-                .eq('id', existing.id);
+            // Successfully updated results
+            // Only send notification if explicitly requested
+            if (notifyDoctor) {
+                try {
+                    const { data: patient } = await supabase
+                        .from('patients')
+                        .select('name, surname')
+                        .eq('hn', hn)
+                        .single();
 
-            if (error) {
-                console.error('Update lab result error:', error);
-                return { success: false, error: error.message };
+                    if (patient) {
+                        const patientName = `${patient.name} ${patient.surname || ''}`.trim();
+                        const { NotificationService } = await import('./notificationService');
+                        // We don't have the lab tech name context here easily without auth context passed down
+                        // But that's optional.
+                        await NotificationService.sendLabResultReadyNotification(hn, patientName);
+                    }
+                } catch (notifyError) {
+                    console.error('Notification trigger error:', notifyError);
+                    // Don't fail the whole operation just because notification failed
+                }
             }
+
             return { success: true };
         } catch (error: any) {
             console.error('Update lab result error:', error);

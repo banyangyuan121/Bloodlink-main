@@ -56,11 +56,18 @@ export function InboxProvider({ children }: { children: ReactNode }) {
             type = 'resultReady';
         }
 
+        // Extract URL from content if present
+        let finalTargetPath = '/inbox';
+        const urlMatch = content.match(/(\/results\/[a-zA-Z0-9-]+)/);
+        if (urlMatch) {
+            finalTargetPath = urlMatch[1];
+        }
+
         notify(
             type,
             subject || 'แจ้งเตือนระบบ',
             content || 'คุณมีการแจ้งเตือนใหม่',
-            '/inbox'
+            finalTargetPath
         );
     }, [notify]);
 
