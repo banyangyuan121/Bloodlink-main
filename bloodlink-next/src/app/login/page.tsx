@@ -316,8 +316,8 @@ export default function LoginPage() {
                                         value={regHospitalType}
                                         onChange={(val) => setRegHospitalType(val)}
                                         options={[
-                                            { value: 'ชุมชน', label: 'โรงพยาบาลชุมชน' },
-                                            { value: 'ส่งเสริมสุขภาพตำบล', label: 'โรงพยาบาลส่งเสริมสุขภาพตำบล' }
+                                            { value: 'แม่ข่าย', label: 'โรงพยาบาลชุมชน' },
+                                            { value: 'ชุมชน', label: 'โรงพยาบาลส่งเสริมสุขภาพตำบล' }
                                         ]}
                                         required
                                         error={fieldErrors.hospitalType?.[0]}
