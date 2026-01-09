@@ -64,9 +64,7 @@ export default function LoginPage() {
             const result = await authenticate(email, password);
             if (result?.error) {
                 setErrorMessage(result.error);
-                if (result.fieldErrors) {
-                    setFieldErrors(result.fieldErrors);
-                }
+                if (result.fieldErrors) setFieldErrors(result.fieldErrors);
                 setIsLoading(false);
             } else {
                 window.location.href = '/dashboard';
@@ -84,11 +82,14 @@ export default function LoginPage() {
         setFieldErrors({});
         setIsLoading(true);
 
+        // Validate passwords
         if (regPassword !== regConfirmPassword) {
             setRegError('รหัสผ่านไม่ตรงกัน');
             setIsLoading(false);
             return;
         }
+
+        // Validate privacy
         if (!regPrivacy) {
             setRegError('กรุณายอมรับนโยบายความเป็นส่วนตัว');
             setIsLoading(false);
@@ -108,9 +109,7 @@ export default function LoginPage() {
 
             if (result.error) {
                 setRegError(result.error);
-                if (result.fieldErrors) {
-                    setFieldErrors(result.fieldErrors);
-                }
+                if (result.fieldErrors) setFieldErrors(result.fieldErrors);
                 setIsLoading(false);
                 return;
             }
@@ -132,6 +131,247 @@ export default function LoginPage() {
         <div className="min-h-screen bg-[#F3F4F6] dark:bg-[#0f1115] flex items-center justify-center p-5 md:p-10 font-[family-name:var(--font-kanit)] transition-colors">
             <div className={`bg-white dark:bg-[#1F2937] rounded-3xl shadow-2xl dark:shadow-none w-full max-w-[900px] overflow-hidden flex flex-col md:flex-row ${mode === 'register' ? 'md:min-h-[700px]' : 'h-[640px]'} transition-all`}>
 
-                {/* Left Panel: Illustration */}
+                {/* Left Panel */}
                 <div className="hidden md:flex flex-col items-center justify-center w-1/2 bg-[#D1ECF1] dark:bg-[#1e293b] relative p-8 shadow-lg rounded-lg transition-colors">
-                    <d
+                    <div className="relative w-full h-full flex items-center justify-center">
+                        <Image
+                            src="/images/nurse.png"
+                            alt="Nurse Illustration"
+                            width={380}
+                            height={380}
+                            className="object-contain max-w-[380px] max-h-[380px]"
+                            priority
+                        />
+                    </div>
+                </div>
+
+                {/* Right Panel */}
+                <div className={`w-full md:w-1/2 bg-white dark:bg-[#1F2937] flex items-center justify-center p-8 md:p-10 ${mode === 'register' ? 'overflow-y-auto' : ''} transition-colors`}>
+                    <div className="w-full max-w-[400px]">
+
+                        {/* Logo */}
+                        <div className="mb-4">
+                            {mounted ? (
+                                <Image
+                                    src={resolvedTheme === 'dark' ? "/images/logo_d.png" : "/images/logo.png"}
+                                    alt="BloodLink Logo"
+                                    width={180}
+                                    height={80}
+                                    className="w-[180px] h-auto object-contain animate-fadeIn"
+                                    priority
+                                />
+                            ) : <div className="w-[180px] h-[80px]" />}
+                        </div>
+                        <p className="text-[26px] text-gray-700 dark:text-gray-200 font-normal whitespace-nowrap z-10 transition-colors mb-8">
+                            ยินดีต้อนรับสู่
+                        </p>
+
+                        {/* Login Form */}
+                        {mode === 'login' && (
+                            <form onSubmit={handleLoginSubmit} className="space-y-5 animate-fadeIn" noValidate>
+                                <div className="form-group">
+                                    <label htmlFor="login-email" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">อีเมล</label>
+                                    <input
+                                        id="login-email"
+                                        type="email"
+                                        required
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className={`w-full py-2.5 px-3.5 text-sm border ${fieldErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600 transition-colors`}
+                                        autoComplete="username"
+                                    />
+                                    {fieldErrors.email && <p className="text-red-500 text-xs mt-1">{fieldErrors.email[0]}</p>}
+                                </div>
+
+                                <div className="form-group">
+                                    <label htmlFor="login-password" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">รหัสผ่าน</label>
+                                    <div className="relative">
+                                        <input
+                                            id="login-password"
+                                            type={showPassword ? "text" : "password"}
+                                            required
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            className={`w-full py-2.5 px-3.5 pr-12 text-sm border ${fieldErrors.password ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600 transition-colors`}
+                                            autoComplete="current-password"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        >
+                                            {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                        </button>
+                                    </div>
+                                    {fieldErrors.password && <p className="text-red-500 text-xs mt-1">{fieldErrors.password[0]}</p>}
+                                </div>
+
+                                <div className="flex justify-end mb-6">
+                                    <Link href="/forgot-password" className="text-sm text-purple-600 dark:text-purple-400 font-medium hover:underline">ลืมรหัสผ่าน?</Link>
+                                </div>
+
+                                {errorMessage && (
+                                    <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 p-3 rounded-lg text-center" role="alert" aria-live="polite">
+                                        {errorMessage}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={isLoading}
+                                    className="w-48 mx-auto block py-3 px-6 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500 rounded-full shadow-lg hover:bg-purple-700 active:bg-purple-800 transition-all disabled:opacity-70"
+                                >
+                                    {isLoading ? <Loader2 className="animate-spin h-5 w-5 mx-auto" /> : "เข้าสู่ระบบ"}
+                                </button>
+
+                                <div className="text-center mt-6">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">หากคุณยังไม่ได้ลงทะเบียน คลิกปุ่มด้านล่าง</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => switchMode('register')}
+                                        className="w-48 mx-auto block py-3 px-6 text-sm font-semibold text-gray-500 dark:text-gray-300 bg-white dark:bg-[#374151] border border-gray-400 dark:border-gray-600 rounded-full hover:bg-purple-50 dark:hover:bg-purple-900/30 hover:border-purple-600 dark:hover:border-purple-500 transition-all"
+                                    >
+                                        ลงทะเบียน
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
+                        {/* Register Form */}
+                        {mode === 'register' && (
+                            <form onSubmit={handleRegisterSubmit} className="space-y-4 animate-fadeIn" noValidate>
+                                {/* Role */}
+                                <CustomSelect
+                                    label="บทบาท"
+                                    value={regRole}
+                                    onChange={(val) => setRegRole(val)}
+                                    options={[
+                                        { value: 'แพทย์', label: 'แพทย์' },
+                                        { value: 'พยาบาล', label: 'พยาบาล' },
+                                        { value: 'เจ้าหน้าที่ห้องปฏิบัติการ', label: 'เจ้าหน้าที่ห้องปฏิบัติการ' }
+                                    ]}
+                                    required
+                                    error={fieldErrors.role?.[0]}
+                                />
+
+                                {/* Name */}
+                                <input
+                                    type="text"
+                                    placeholder="ชื่อ"
+                                    required
+                                    value={regName}
+                                    onChange={(e) => setRegName(e.target.value)}
+                                    className={`w-full py-2.5 px-3.5 text-sm border ${fieldErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600 transition-colors`}
+                                />
+
+                                {/* Surname */}
+                                <input
+                                    type="text"
+                                    placeholder="นามสกุล"
+                                    required
+                                    value={regSurname}
+                                    onChange={(e) => setRegSurname(e.target.value)}
+                                    className={`w-full py-2.5 px-3.5 text-sm border ${fieldErrors.surname ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600 transition-colors`}
+                                />
+
+                                {/* Email */}
+                                <input
+                                    type="email"
+                                    placeholder="อีเมล"
+                                    required
+                                    value={regEmail}
+                                    onChange={(e) => setRegEmail(e.target.value)}
+                                    className={`w-full py-2.5 px-3.5 text-sm border ${fieldErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600 transition-colors`}
+                                />
+
+                                {/* Password */}
+                                <div className="relative">
+                                    <input
+                                        type={showRegPassword ? "text" : "password"}
+                                        placeholder="รหัสผ่าน"
+                                        required
+                                        value={regPassword}
+                                        onChange={(e) => setRegPassword(e.target.value)}
+                                        className={`w-full py-2.5 px-3.5 pr-12 text-sm border ${fieldErrors.password ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600 transition-colors`}
+                                    />
+                                    <button type="button" onClick={() => setShowRegPassword(!showRegPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                        {showRegPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                    </button>
+                                </div>
+
+                                {/* Confirm Password */}
+                                <div className="relative">
+                                    <input
+                                        type={showRegConfirmPassword ? "text" : "password"}
+                                        placeholder="ยืนยันรหัสผ่าน"
+                                        required
+                                        value={regConfirmPassword}
+                                        onChange={(e) => setRegConfirmPassword(e.target.value)}
+                                        className="w-full py-2.5 px-3.5 pr-12 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600 transition-colors"
+                                    />
+                                    <button type="button" onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                        {showRegConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                    </button>
+                                </div>
+
+                                {/* Hospital Type */}
+                                <CustomSelect
+                                    label="ประเภทโรงพยาบาล"
+                                    value={regHospitalType}
+                                    onChange={(val) => setRegHospitalType(val)}
+                                    options={[
+                                        { value: 'แม่ข่าย', label: 'โรงพยาบาลชุมชน' },
+                                        { value: 'ชุมชน', label: 'โรงพยาบาลส่งเสริมสุขภาพตำบล' }
+                                    ]}
+                                    required
+                                    error={fieldErrors.hospitalType?.[0]}
+                                />
+
+                                {/* Hospital Name */}
+                                <input
+                                    type="text"
+                                    placeholder="ชื่อโรงพยาบาล"
+                                    required
+                                    value={regHospitalName}
+                                    onChange={(e) => setRegHospitalName(e.target.value)}
+                                    className={`w-full py-2.5 px-3.5 text-sm border ${fieldErrors.hospitalName ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-md bg-white dark:bg-[#374151] text-gray-900 dark:text-white focus:outline-none focus:border-purple-600 transition-colors`}
+                                />
+
+                                {/* Privacy */}
+                                <CustomCheckbox
+                                    checked={regPrivacy}
+                                    onChange={setRegPrivacy}
+                                    label={
+                                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                                            ฉันเข้าใจ และยอมรับ
+                                            <Link href="/privacy-policy" className="text-purple-600 dark:text-purple-400 hover:underline ml-1">
+                                                นโยบายความเป็นส่วนตัว
+                                            </Link>
+                                        </span>
+                                    }
+                                />
+
+                                {regError && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 p-3 rounded-lg text-center">{regError}</div>}
+                                {regSuccess && <div className="text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 p-3 rounded-lg text-center">{regSuccess}</div>}
+
+                                <button type="submit" className="w-48 mx-auto block py-3 px-6 text-sm font-semibold text-white bg-purple-600 rounded-full shadow-lg hover:bg-purple-700 active:bg-purple-800 transition-all mt-6">
+                                    ลงทะเบียน
+                                </button>
+
+                                <div className="text-center mt-6">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        มีบัญชีอยู่แล้ว? <button type="button" onClick={() => switchMode('login')} className="text-purple-600 dark:text-purple-400 font-medium hover:underline">เข้าสู่ระบบ</button>
+                                    </p>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <style jsx global>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateX(20px); }
+                    to { opacity: 1; transform: translateX(0); }
+                }
